@@ -1,3 +1,4 @@
+from typing import List
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 from enum import StrEnum
@@ -8,6 +9,8 @@ from pymongo.errors import DuplicateKeyError
 client = MongoClient("mongodb://localhost:27017")
 db = client["wassali_db"]
 users_collection = db["users"]
+
+
 # usernames must be unique to prevent duplicate
 users_collection.create_index("username", unique=True)
 
@@ -26,13 +29,27 @@ class Status(StrEnum):
     SUSPENDED = "suspended"
 
 
+# create crypted password function
 def crypt_password(password: str) -> str:
     return generate_password_hash(password, method="pbkdf2:sha256", salt_length=8)
+
+
+# create verify password function
+def verify_password(password: str, hashed_password: str) -> bool:
+    return check_password_hash(hashed_password, password)
 
 
 # create identity class for each user
 class Identity:
     def __init__(self, username: str, email: str, password: str) -> None:
+
+        if len(username) < 3:
+            raise ValueError("Username must be at least 3 characters long.")
+        if "@" not in email:
+            raise ValueError("Email must contain an @ symbol.")
+        if len(password) < 5:
+            raise ValueError("Password must be at least 5 characters long.")
+
         self.username = username
         self.email = email
         self.password = crypt_password(password)
@@ -66,85 +83,152 @@ class User:
             "status": self.status.value,
         }
 
-    def register(self) -> None:
+    def register(self) -> dict:
         """Saves the user to the database"""
         data: dict = self.to_dict()
         try:
             users_collection.insert_one(data)
-            print(f" Success: User {self.identity.username} registered!")
+            return {
+                "success": True,
+                "message": f"User {self.identity.username} registered",
+            }
         except DuplicateKeyError:
-            print(f" Error: User {self.identity.username} already exists.")
-        except Exception:
-            print(f" Error: {Exception}")
-
-    def display_db(self):
-        """Helper to print all users in the console."""
-        all_users = list(users_collection.find())
-        for user in all_users:
-            print(user)
+            return {
+                "success": False,
+                "message": f"User {self.identity.username} already exists.",
+            }
+        except Exception as e:
+            return {"success": False, "message": str(e)}
 
     @staticmethod
-    def get_all_users():
+    def login(username: str, password: str) -> dict:
+        user = users_collection.find_one({"username": username})
+        if not user:
+            return {"success": False, "message": f"User {username} does not exist."}
+        if user["status"] == Status.SUSPENDED:
+            return {"success": False, "message": f"User {username} is suspended"}
+        elif user["status"] == Status.PENDING:
+            return {"success": False, "message": f"User {username} is pending"}
+
+        if not verify_password(password, user["password"]):
+            return {
+                "success": False,
+                "message": f"Incorrect password for user {username}",
+            }
+
+        return {
+            "success": True,
+            "role": user["role"],
+            "username": user["username"],
+            "_id": str(user["_id"]),
+            "message": f"User {username} logged in successfully",
+        }
+
+    @staticmethod
+    def get_all_users(role: Role) -> dict | List:
         """Returns a list of all users instead of printing them."""
-        users = list(users_collection.find())
-        return users
-
-    """Finds a user by name using a static method """
+        if role == Role.ADMIN:
+            users_list = list(users_collection.find())
+            return users_list
+        else:
+            return {
+                "success": False,
+                "message": "You are not authorized to view this data.",
+            }
 
     @staticmethod
-    def find_user(username: str) -> str:
-        user_data = users_collection.find_one({"username": username})
-        if user_data:
-            print(f" User {username} found!")
-            return user_data
+    def find_user(id: str) -> dict:
+        """Finds a user by name using a UUID"""
+        user = users_collection.find_one({"_id": id})
+        if not user:
+            return {"success": False, "message": f"User with id {id} does not exist."}
         else:
-            return f"User {username} not found."
+            return {"success": True, "user": f"{user} is found"}
+
+    @staticmethod
+    def change_username(old_username: str, new_username: str) -> dict:
+        try:
+            find_username = users_collection.find_one({"username": old_username})
+            if find_username is None:
+                return {
+                    "success": False,
+                    "message": f"User {old_username} does not exist.",
+                }
+            else:
+                users_collection.update_one(
+                    {"_id": find_username["_id"]}, {"$set": {"username": new_username}}
+                )
+                return {
+                    "success": True,
+                    "message": f"Username {old_username} changed to {new_username}",
+                }
+        except DuplicateKeyError as e:
+            return {"success": False, "message": str(e)}
 
     """add change password function"""
 
     @staticmethod
-    def change_password(username: str, old_password: str, new_password: str) -> None:
+    def change_password(username: str, old_password: str, new_password: str) -> dict:
         username_exist = users_collection.find_one({"username": username})
         if username_exist is None:
-            print(f" User {username} does not exist.")
-            return
+            return {"success": False, "message": f"User {username} does not exist."}
         if check_password_hash(username_exist["password"], old_password):
             new_hashed_password = crypt_password(new_password)
             users_collection.update_one(
                 {"username": username}, {"$set": {"password": new_hashed_password}}
             )
-            print(f" Password for {username} changed successfully.")
-            return
+            return {
+                "success": True,
+                "message": f"Password for {username} changed successfully.",
+            }
         else:
-            print("Username or password is incorrect.")
-            return
+            return {"success": False, "message": "Username or password is incorrect."}
 
     """"deletes a user only if the password and username are correct"""
 
     @staticmethod
-    def delete(username: str, password: str) -> None:
-        user_data = users_collection.find_one({"username": username})
-        if user_data is None:
-            print(f" User {username} does not exist.")
-            return
+    def delete(username: str, password: str, role: Role) -> dict:
+        if role == Role.ADMIN:
+            user_data = users_collection.find_one({"username": username})
+            if user_data is None:
+                return {"success": False, "message": f"User {username} does not exist."}
 
-        is_data_correct: bool = check_password_hash(user_data["password"], password)
-        if is_data_correct:
-            users_collection.delete_one({"username": username})
-            print(f" User {username} deleted successfully.")
-            return
+            is_data_correct: bool = check_password_hash(user_data["password"], password)
+            if is_data_correct:
+                users_collection.delete_one({"username": username})
+                return {
+                    "success": True,
+                    "message": f"User {username} deleted successfully.",
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "Username or password is incorrect.",
+                }
+
         else:
-            print("Username or password is incorrect.")
-            return
+            return {
+                "success": False,
+                "message": "You are not authorized to delete this user.",
+            }
 
 
-admin_identity: Identity = Identity("admin", "admin@admin.com", "admin")
-client_identity: Identity = Identity("client", "client@client.com", "client")
-deliverer_identity: Identity = Identity(
-    "deliverer", "deliverer@deliverer.com", "deliverer"
-)
+def main():
+    admin_identity: Identity = Identity("admin", "admin@admin.com", "admin")
+    client_identity: Identity = Identity("client", "client@client.com", "client")
+    deliverer_identity: Identity = Identity(
+        "deliverer", "deliverer@deliverer.com", "deliverer"
+    )
+
+    admin_user: User = User(admin_identity, Status.ACTIVE, Role.ADMIN)
+    deliverer_user: User = User(deliverer_identity, Status.PENDING, Role.DELIVERER)
+    client_user: User = User(client_identity, Status.ACTIVE, Role.CLIENT)
+
+    print(client_user.register())
+    print(deliverer_user.register())
+    print(admin_user.register())
+    print(User.change_username("admin", "admin2"))
 
 
-admin_user: User = User(admin_identity, Status.ACTIVE, Role.ADMIN)
-deliverer_user: User = User(deliverer_identity, Status.ACTIVE, Role.DELIVERER)
-client_user: User = User(client_identity, Status.ACTIVE, Role.CLIENT)
+if __name__ == "__main__":
+    main()

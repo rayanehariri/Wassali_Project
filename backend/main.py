@@ -1,18 +1,22 @@
 # Save this as app.py
-from flask import Flask, jsonify
-from models import User
+from models import Role, User
+from flask import Flask, jsonify, render_template, request
 
+# Create a route for the home page
 app = Flask(__name__)
 
 
-# Create a route for the home page
 @app.route("/")
-# create a home page
 def home():
-    users_list = User.get_all_users()
+    return render_template("project.html")
+
+
+@app.route("/users")
+# create a home page
+def users():
+    users_list = User.get_all_users(Role.ADMIN)
     for u in users_list:
         u["_id"] = str(u["_id"])
-
     return jsonify(users_list)
 
 
