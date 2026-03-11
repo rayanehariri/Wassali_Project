@@ -1,12 +1,11 @@
-from typing import List
 import uuid
-from werkzeug.security import generate_password_hash, check_password_hash
 from enum import StrEnum
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
+from werkzeug.security import check_password_hash, generate_password_hash
 
 # Create a local mongodb database server
-client = MongoClient("mongodb://localhost:27017")
+client = MongoClient("mongodb://127.0.0.1:27017")
 db = client["wassali_db"]
 users_collection = db["users"]
 
@@ -39,16 +38,22 @@ def verify_password(password: str, hashed_password: str) -> bool:
     return check_password_hash(hashed_password, password)
 
 
+def verify_users_data(username: str, email: str, password: str) -> None:
+    if len(username) < 3:
+        raise ValueError("Username must be at least 3 characters long.")
+    if "@" not in email:
+        raise ValueError("Email must contain an @ symbol.")
+    elif not email.endswith(".dz"):
+        pass  # raise ValueError("Email must contain an .dz symbol at the end") after testing add this line
+    if len(password) < 5:
+        raise ValueError("Password must be at least 5 characters long.")
+
+
 # create identity class for each user
 class Identity:
     def __init__(self, username: str, email: str, password: str) -> None:
 
-        if len(username) < 3:
-            raise ValueError("Username must be at least 3 characters long.")
-        if "@" not in email:
-            raise ValueError("Email must contain an @ symbol.")
-        if len(password) < 5:
-            raise ValueError("Password must be at least 5 characters long.")
+        verify_users_data(username, email, password)
 
         self.username = username
         self.email = email
@@ -58,12 +63,13 @@ class Identity:
 
     # print the identity for debugging
     def __repr__(self) -> str:
-        return f"Identity(username={self.username}, email={self.email}, password={self.password} , id : {self.id})"
+        return (
+            f"Identity(username={self.username} , email={self.email} , id : {self.id})"
+        )
 
 
 # create user class for each user and set the basic user operations register , delete , find and display the database
 class User:
-
     def __init__(self, identity: Identity, status: Status, role: Role) -> None:
         self.identity = identity
         self.role = role
@@ -125,11 +131,11 @@ class User:
         }
 
     @staticmethod
-    def get_all_users(role: Role) -> dict | List:
+    def get_all_users(role: Role) -> dict:
         """Returns a list of all users instead of printing them."""
         if role == Role.ADMIN:
             users_list = list(users_collection.find())
-            return users_list
+            return {"success": True, "users": users_list}
         else:
             return {
                 "success": False,
@@ -143,11 +149,14 @@ class User:
         if not user:
             return {"success": False, "message": f"User with id {id} does not exist."}
         else:
-            return {"success": True, "user": f"{user} is found"}
+            return {"success": True, "user": user}
 
     @staticmethod
     def change_username(old_username: str, new_username: str) -> dict:
         try:
+            if len(new_username) < 3:
+                raise ValueError("Username must be at least 3 characters long.")
+
             find_username = users_collection.find_one({"username": old_username})
             if find_username is None:
                 return {
@@ -172,6 +181,9 @@ class User:
         username_exist = users_collection.find_one({"username": username})
         if username_exist is None:
             return {"success": False, "message": f"User {username} does not exist."}
+        elif len(new_password) < 5:
+            raise ValueError("Password must be at least 5 characters long.")
+
         if check_password_hash(username_exist["password"], old_password):
             new_hashed_password = crypt_password(new_password)
             users_collection.update_one(
@@ -182,7 +194,7 @@ class User:
                 "message": f"Password for {username} changed successfully.",
             }
         else:
-            return {"success": False, "message": "Username or password is incorrect."}
+            return {"success": False, "message": "password is incorrect."}
 
     """"deletes a user only if the password and username are correct"""
 
@@ -213,7 +225,7 @@ class User:
             }
 
 
-def main():
+def main() -> None:
     admin_identity: Identity = Identity("admin", "admin@admin.com", "admin")
     client_identity: Identity = Identity("client", "client@client.com", "client")
     deliverer_identity: Identity = Identity(
@@ -227,7 +239,7 @@ def main():
     print(client_user.register())
     print(deliverer_user.register())
     print(admin_user.register())
-    print(User.change_username("admin", "admin2"))
+    print(User.delete("admin", "admin", Role.ADMIN))
 
 
 if __name__ == "__main__":
