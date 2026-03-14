@@ -1,31 +1,7 @@
 import uuid
-from enum import StrEnum
-from pymongo import MongoClient
+from __init__ import users_collection, Role, Status
 from pymongo.errors import DuplicateKeyError
 from werkzeug.security import check_password_hash, generate_password_hash
-
-# Create a local mongodb database server
-client = MongoClient("mongodb://127.0.0.1:27017")
-db = client["wassali_db"]
-users_collection = db["users"]
-
-
-# usernames must be unique to prevent duplicate
-users_collection.create_index("username", unique=True)
-
-
-# define 3 types of users check rayan's wassali.pdf file
-class Role(StrEnum):
-    ADMIN = "admin"
-    CLIENT = "client"
-    DELIVERER = "deliverer"
-
-
-# define 3 types of users check rayan's wassali.pdf file pending / active / suspended
-class Status(StrEnum):
-    PENDING = "pending"
-    ACTIVE = "active"
-    SUSPENDED = "suspended"
 
 
 # create crypted password function
@@ -38,15 +14,37 @@ def verify_password(password: str, hashed_password: str) -> bool:
     return check_password_hash(hashed_password, password)
 
 
+def has_digit_and_special(password: str) -> bool:
+    special_char = "[@_!#$%^&*()<>?\\/|}{~:]"
+    digits_char = "0123456789"
+    has_special = False
+    has_digit = False
+    if any(char in password for char in special_char):
+        has_special = True
+    if any(char in password for char in digits_char):
+        has_digit = True
+    return has_special and has_digit
+
+
+def is_strong_password(password: str) -> bool:
+    if len(password) < 5:
+        return False
+    elif not has_digit_and_special(password):
+        return False
+    return True
+
+
 def verify_users_data(username: str, email: str, password: str) -> None:
     if len(username) < 3:
-        raise ValueError("Username must be at least 3 characters long.")
+        raise ValueError(f"Username {username} must be at least 3 characters long.")
     if "@" not in email:
-        raise ValueError("Email must contain an @ symbol.")
-    elif not email.endswith(".dz"):
-        pass  # raise ValueError("Email must contain an .dz symbol at the end") after testing add this line
-    if len(password) < 5:
-        raise ValueError("Password must be at least 5 characters long.")
+        raise ValueError(f"Useremail : {email} must have the @ Symbol")
+    elif not email.endswith(".com") and not email.endswith(".dz"):
+        raise ValueError(
+            f"Useremail : {email} must have the .dz or .com Symbol at the end"
+        )
+    if not is_strong_password(password):
+        raise ValueError(f"password :{password} is not strong enough")
 
 
 # create identity class for each user
@@ -111,9 +109,9 @@ class User:
         user = users_collection.find_one({"username": username})
         if not user:
             return {"success": False, "message": f"User {username} does not exist."}
-        if user["status"] == Status.SUSPENDED:
+        if user["status"] == Status.SUSPENDED.value:
             return {"success": False, "message": f"User {username} is suspended"}
-        elif user["status"] == Status.PENDING:
+        elif user["status"] == Status.PENDING.value:
             return {"success": False, "message": f"User {username} is pending"}
 
         if not verify_password(password, user["password"]):
@@ -155,7 +153,9 @@ class User:
     def change_username(old_username: str, new_username: str) -> dict:
         try:
             if len(new_username) < 3:
-                raise ValueError("Username must be at least 3 characters long.")
+                raise ValueError(
+                    f"Username : {new_username} must be at least 3 characters long."
+                )
 
             find_username = users_collection.find_one({"username": old_username})
             if find_username is None:
@@ -181,8 +181,8 @@ class User:
         username_exist = users_collection.find_one({"username": username})
         if username_exist is None:
             return {"success": False, "message": f"User {username} does not exist."}
-        elif len(new_password) < 5:
-            raise ValueError("Password must be at least 5 characters long.")
+        elif not is_strong_password(new_password):
+            raise ValueError(f"Password {new_password} is not strong enough.")
 
         if check_password_hash(username_exist["password"], old_password):
             new_hashed_password = crypt_password(new_password)
@@ -226,12 +226,11 @@ class User:
 
 
 def main() -> None:
-    admin_identity: Identity = Identity("admin", "admin@admin.com", "admin")
-    client_identity: Identity = Identity("client", "client@client.com", "client")
+    admin_identity: Identity = Identity("admin", "admin@admin.dz", "admin123!")
+    client_identity: Identity = Identity("client", "client@client.com", "client123!")
     deliverer_identity: Identity = Identity(
-        "deliverer", "deliverer@deliverer.com", "deliverer"
+        "deliverer", "deliverer@deliverer.com", "deliverer123!"
     )
-
     admin_user: User = User(admin_identity, Status.ACTIVE, Role.ADMIN)
     deliverer_user: User = User(deliverer_identity, Status.PENDING, Role.DELIVERER)
     client_user: User = User(client_identity, Status.ACTIVE, Role.CLIENT)
@@ -239,7 +238,7 @@ def main() -> None:
     print(client_user.register())
     print(deliverer_user.register())
     print(admin_user.register())
-    print(User.delete("admin", "admin", Role.ADMIN))
+    print(User.delete("admin", "admin123!", Role.ADMIN))
 
 
 if __name__ == "__main__":
