@@ -1,7 +1,7 @@
 from models import Role, User, Identity, Status
 from flask import Flask, jsonify, render_template
 
-test_identity: Identity = Identity("user_test", "user_test@test.com", "test123")
+test_identity: Identity = Identity("user_test", "user_test@test.com", "test123!")
 test_user: User = User(test_identity, Status.ACTIVE, Role.CLIENT)
 
 # Create a route for the homepage
