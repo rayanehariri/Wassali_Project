@@ -1,9 +1,11 @@
 import uuid
-from __init__ import deliveries_collection, DeliveryStatus
+from __init__ import Role, users_collection, deliveries_collection, DeliveryStatus
 from pymongo.errors import DuplicateKeyError
 
 
 class Delivery:
+    """Represents a delivery request with full lifecycle management."""
+
     def __init__(
         self,
         client_id: str,
@@ -22,9 +24,11 @@ class Delivery:
         self.price = price
 
     def __repr__(self) -> str:
+        """Debugging representation showing key delivery info."""
         return f"Delivery({self.status}, {self.pickup_address}, {self.dropoff_address}, {self.description_of_order}, {self.price})"
 
     def to_dict(self) -> dict:
+        """Converts the User object into a Dictionary for MongoDB."""
         return {
             "_id": self.id,
             "client_id": self.client_id,
@@ -37,30 +41,40 @@ class Delivery:
         }
 
     def create(self):
+        """Save delivery to database. Returns success status and message."""
         deliverer_data: dict = self.to_dict()
         try:
             deliveries_collection.insert_one(deliverer_data)
             return {"success": True, "message": " Delivery created successfully"}
         except DuplicateKeyError:
+            # Extremely rare with UUID, but handle gracefully
             return {"success": False, "message": "Delivery already exists"}
         except Exception as e:
             return {"success": False, "message": str(e)}
 
     @staticmethod
     def accept(delivery_id: str, deliverer_id: str) -> dict:
+        """Assign deliverer to a pending delivery.Fails if delivery doesn't exist or isn't pending."""
         try:
+            # Find the delivery in database
             deliverer_data = deliveries_collection.find_one({"_id": delivery_id})
+
+            # Check if delivery exists
             if deliverer_data is None:
                 return {"success": False, "message": "Delivery does not exist"}
+
+            # Verify delivery is still available
             elif deliverer_data["status"] != DeliveryStatus.PENDING.value:
                 return {"success": False, "message": "Delivery is not pending"}
+
+            # Assign deliverer and update status
             else:
                 deliveries_collection.update_one(
                     {"_id": delivery_id},
                     {
                         "$set": {
-                            "deliverer_id": deliverer_id,
-                            "status": DeliveryStatus.ACCEPTED,
+                            "deliverer_id": deliverer_id,  # Assign deliverer
+                            "status": DeliveryStatus.ACCEPTED,  # Change Status
                         }
                     },
                 )
@@ -73,17 +87,34 @@ class Delivery:
             return {"success": False, "message": str(e)}
 
     @staticmethod
-    def reject(delivery_id: str) -> dict:
-        delivery_data = deliveries_collection.find_one({"_id": delivery_id})
-        if delivery_data is None:
-            return {"success": False, "message": "Delivery does not exist"}
-        deliveries_collection.find_one_and_update(
-            {"_id": delivery_id}, {"$set": {"status": DeliveryStatus.REJECTED}}
+    def reject_by_admin(delivery_id: str, admin_id: str, reason: str) -> dict:
+        admin = users_collection.find_one({"_id": admin_id})
+        if admin["role"] != Role.ADMIN:
+            return {"success": False, "message": "admin only privileges"}
+
+        deliveries_collection.update_one(
+            {"_id": delivery_id},
+            {
+                "$set": {
+                    "status": DeliveryStatus.REJECTED,
+                    "rejected reason ": reason,
+                    "rejected by admin": admin_id,
+                }
+            },
         )
-        return {"success": True, "message": "Delivery rejected"}
+        return {"success": True, "message": "delivery rejected by the admin"}
+
+    @staticmethod
+    def cancel_by_client(delivery_id: str, client_id: str) -> dict:
+        pass
+
+    @staticmethod
+    def drop_by_deliverer(delivery_id: str, deliverer_id: str):
+        pass
 
     @staticmethod
     def mark_as_delivered(delivery_id: str) -> dict:
+        """Mark accepted delivery as completed."""
         deliveries_collection.find_one_and_update(
             {"_id": delivery_id}, {"$set": {"status": DeliveryStatus.DELIVERED}}
         )
@@ -91,6 +122,7 @@ class Delivery:
 
     @staticmethod
     def track(delivery_id: str) -> dict:
+        """Get current status and details of a delivery."""
         delivery_data = deliveries_collection.find_one({"_id": delivery_id})
         if delivery_data is None:
             return {"success": False, "message": "Delivery does not exist"}
@@ -102,6 +134,7 @@ class Delivery:
 
     @staticmethod
     def find_available() -> dict:
+        """Get all pending deliveries available for acceptance."""
         delivery_data = deliveries_collection.find(
             {"status": DeliveryStatus.PENDING.value}
         )
@@ -113,13 +146,14 @@ class Delivery:
 
 
 def main() -> None:
+    # test the function sees the lifecycle of the delivery
     # 1. Create a delivery
     d = Delivery(
         client_id="fake-client-uuid-123",
         pickup_address="Oran",
         dropoff_address="Sidi bel abbes",
-        description_of_order="box of shoes",
-        price=3650.75,
+        description_of_order="books",
+        price=500.00,
     )
     print(d.create())
 
@@ -140,12 +174,6 @@ def main() -> None:
 
     # 7. Track again to confirm status is delivered
     print(Delivery.track(d.id))
-
-    # 8. Reject it
-    print(Delivery.reject(d.id))
-
-    # 9. Track again to confirm status is rejected should fail
-    print(Delivery.track(str(12365498)))
 
 
 if __name__ == "__main__":
