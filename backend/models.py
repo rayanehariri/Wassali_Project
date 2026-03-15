@@ -14,6 +14,7 @@ def verify_password(password: str, hashed_password: str) -> bool:
     return check_password_hash(hashed_password, password)
 
 
+# verify if password has digits_char AND special_char
 def has_digit_and_special(password: str) -> bool:
     special_char = "[@_!#$%^&*()<>?\\/|}{~:]"
     digits_char = "0123456789"
@@ -26,6 +27,7 @@ def has_digit_and_special(password: str) -> bool:
     return has_special and has_digit
 
 
+# boolean function for verify if password is strong or not
 def is_strong_password(password: str) -> bool:
     if len(password) < 5:
         return False
@@ -34,6 +36,7 @@ def is_strong_password(password: str) -> bool:
     return True
 
 
+# verify users data before saving in database (username , email , password)
 def verify_users_data(username: str, email: str, password: str) -> None:
     if len(username) < 3:
         raise ValueError(f"Username {username} must be at least 3 characters long.")
@@ -59,8 +62,8 @@ class Identity:
         # create a unique random id using uuid lib from python
         self.id = str(uuid.uuid4())
 
-    # print the identity for debugging
     def __repr__(self) -> str:
+        """Debugging representation showing key delivery info."""
         return (
             f"Identity(username={self.username} , email={self.email} , id : {self.id})"
         )
@@ -226,6 +229,7 @@ class User:
 
 
 def main() -> None:
+    # testing the User and Identity classes functions
     admin_identity: Identity = Identity("admin", "admin@admin.dz", "admin123!")
     client_identity: Identity = Identity("client", "client@client.com", "client123!")
     deliverer_identity: Identity = Identity(
