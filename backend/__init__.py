@@ -15,8 +15,8 @@ users_collection.create_index("username", unique=True)
 
 app = Flask(__name__)
 
-
-CORS(app)
+# enable CORS in flask server to run in the frontend
+CORS(app) 
 
 
 # define 3 types of users check rayan's wassali.pdf file
