@@ -1,7 +1,7 @@
 from __init__ import app
 from flask import render_template
-from routes.admin import admin
-from routes.auth import auth
+from routes import admin
+from routes import auth
 
 # create the blueprints for auth and admin
 app.register_blueprint(auth, url_prefix="/api/auth")
