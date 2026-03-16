@@ -24,7 +24,7 @@ class Delivery:
         self.price = price
 
     def __repr__(self) -> str:
-        """Debugging representation showing key delivery info."""
+        """Debugging representation showing delivery info."""
         return f"Delivery({self.status}, {self.pickup_address}, {self.dropoff_address}, {self.description_of_order}, {self.price})"
 
     def to_dict(self) -> dict:

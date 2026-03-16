@@ -3,9 +3,9 @@ from flask import render_template
 from routes.admin import admin
 from routes.auth import auth
 
-
-app.register_blueprint(auth)
-app.register_blueprint(admin)
+# create the blueprints for auth and admin
+app.register_blueprint(auth, url_prefix="/api/auth")
+app.register_blueprint(admin, url_prefix="/api/admin")
 
 
 # Create a route for the homepage
@@ -14,5 +14,6 @@ def home():
     return render_template("project.html")
 
 
+# Run the app
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)

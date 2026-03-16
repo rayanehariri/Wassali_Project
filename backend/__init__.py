@@ -1,6 +1,7 @@
 from flask import Flask
 from enum import StrEnum
 from pymongo import MongoClient
+from flask_cors import CORS
 
 # Create a local mongodb database server
 wassali_db = MongoClient("mongodb://127.0.0.1:27017")
@@ -13,6 +14,9 @@ deliveries_collection = db["deliveries"]
 users_collection.create_index("username", unique=True)
 
 app = Flask(__name__)
+
+
+CORS(app)
 
 
 # define 3 types of users check rayan's wassali.pdf file
