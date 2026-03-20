@@ -1,385 +1,455 @@
 <!DOCTYPE html>
-
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>Wassali - Modern Delivery Platform</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Wassali - Fast, local, and trusted delivery platform connecting communities">
   <meta name="keywords" content="delivery, local delivery, Algeria, Wassali">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='project.css') }}">
-  <script src="{{ url_for('static', filename='project.js') }}"></script>
 </head>
 
 <body>
 
-<!-- NAVBAR -->
-<nav>
-  <div class="logo">
-    <svg style="display: inline-block; vertical-align: middle; margin-right: 6px;" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-      <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-      <line x1="12" y1="22.08" x2="12" y2="12"></line>
-    </svg>
-    Wassali
-  </div>
-  <button class="mobile-menu-btn">☰</button>
-  <div class="nav-links" id="navLinks">
-    <a href="#">Home</a>
-    <a href="#faq">FAQ</a>
-    <a href="#" class="notification-link">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+  <!-- NAVBAR -->
+  <nav>
+    <div class="logo">
+      <svg style="display: inline-block; vertical-align: middle; margin-right: 6px;" width="24" height="24"
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path
+          d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+        </path>
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+        <line x1="12" y1="22.08" x2="12" y2="12"></line>
       </svg>
-      <span class="notification-badge">3</span>
-    </a>
-    <button class="btn-primary">Register</button>
-  <svg class="filter-svg" xmlns="http://www.w3.org/2000/svg" version="1.1">
-  <filter id="blurFilter">
-    <feGaussianBlur stdDeviation="5"></feGaussianBlur>
-    <feColorMatrix type="matrix" values="
-      1 0 0 0 0
-      0 1 0 0 0
-      0 0 1 0 0
-      0 0 0 19 -9"></feColorMatrix>
-  </filter>
-</svg>
-<label class="dark-mode-label">
-  <div class="switch">
-    <input id="darkToggleInput" type="checkbox">
-    <div class="toggle-container">
-      <div class="thumb"></div>
-      <div class="toggle-icon-left"></div>
-<div class="toggle-icon-right"></div>
+      Wassali
     </div>
-  </div>
-</label>
-  </div>
-</nav>
-
-<!-- HERO -->
-<div class="hero page">
-  <h1>Fast, Local, <span>Trusted Delivery</span></h1>
-  <p>Wassali connects you with trusted local deliverers for fast, affordable, and secure deliveries.</p>
-
-  <div class="hero-buttons">
-    <button class="btn-primary">Get Started →</button>
-    <button class="btn-outline">Become a Deliverer</button>
-  </div>
-</div>
-
-<!-- HOW IT WORKS -->
-<section id="how">
-  <h2>How It Works</h2>
-  <p class="subtitle">Three simple steps</p>
-  <div class="cards">
-    <div class="card">
-      <div class="step">1</div>
-      <h3>Create Delivery</h3>
-      <p>Enter pickup and drop-off locations</p>
-    </div>
-    <div class="card">
-      <div class="step">2</div>
-      <h3>Deliverer Accepts</h3>
-      <p>A verified local deliverer takes the job</p>
-    </div>
-    <div class="card">
-      <div class="step">3</div>
-      <h3>Delivered</h3>
-      <p>Your parcel arrives safely and fast</p>
-    </div>
-  </div>
-</section>
-
-<!-- WHY CHOOSE -->
-<section id="why">
-  <h2>Why Choose Wassali?</h2>
-  <div class="cards">
-    <div class="card">
-      <div class="icon green">📈</div>
-      <h3>Affordable</h3>
-      <p>Lower costs with local deliveries</p>
-    </div>
-    <div class="card">
-      <div class="icon blue">👥</div>
-      <h3>Community</h3>
-      <p>Built around trust and neighborhoods</p>
-    </div>
-    <div class="card">
-      <div class="icon green">🍃</div>
-      <h3>Eco-Friendly</h3>
-      <p>Less distance, less pollution</p>
-    </div>
-  </div>
-</section>
-
-<!-- PRICE CALCULATOR -->
-<section class="calculator">
-  <h2>
-    <i class="fa-solid fa-circle-dollar-to-slot" style="display: inline-block; vertical-align: middle; margin-right: 8px; font-size: 32px; color: var(--accent);"></i>
-    Calculate Your Delivery Cost
-  </h2>
-  <p class="subtitle">Get an instant price estimate</p>
-  
-  <div class="calculator-box">
-    <div class="form-group">
-      <label>Distance (km)</label>
-      <input type="number" id="calcDistance" placeholder="Enter distance" min="1" max="50" value="5">
-    </div>
-    <div class="form-group">
-      <label>Package Size</label>
-      <select id="calcSize">
-        <option value="500">Small (< 5kg) - Base 500 DA</option>
-        <option value="800">Medium (5-15kg) - Base 800 DA</option>
-        <option value="1200">Large (> 15kg) - Base 1200 DA</option>
-      </select>
-    </div>
-
-    <button class="btn-primary" style="width:100%;">Calculate Price</button>
-
-    <div class="price-result" id="priceResult">
-      <div class="price-amount">0 DA</div>
-      <div class="price-label">Estimated delivery cost</div>
-    </div>
-  </div>
-</section>
-
-<!-- TESTIMONIALS -->
-<section id="testimonials">
-  <h2>What Our Users Say</h2>
-  <p class="subtitle">Real experiences from real people</p>
-  
-  <div class="testimonials-slider">
-    <div class="testimonial active">
-      <p class="testimonial-text">"Wassali made sending packages so easy! The deliverer was professional and my parcel arrived within 2 hours. Highly recommend!"</p>
-      <div class="testimonial-author">
-        <div class="testimonial-avatar">SA</div>
-        <div>
-          <strong>Sarah A.</strong>
-          <div style="color:var(--text-secondary); font-size:14px;">Client • Algiers</div>
-        </div>
+    <button class="mobile-menu-btn">☰</button>
+    <div class="nav-links" id="navLinks">
+      <a href="#">Home</a>
+      <a href="#faq">FAQ</a>
+      <a href="#" class="notification-link">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
+        <span class="notification-badge">3</span>
+      </a>
+      <div id="authButtons">
+        <!-- Auth buttons will be dynamically inserted here by JavaScript -->
       </div>
-    </div>
-
-    <div class="testimonial">
-      <p class="testimonial-text">"As a deliverer, Wassali gives me flexible earning opportunities. The app is simple and I love being part of the local community."</p>
-      <div class="testimonial-author">
-        <div class="testimonial-avatar">KM</div>
-        <div>
-          <strong>Karim M.</strong>
-          <div style="color:var(--text-secondary); font-size:14px;">Deliverer • Oran</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="testimonial">
-      <p class="testimonial-text">"Fast, affordable, and reliable! I use Wassali for all my business deliveries now. The tracking feature is excellent."</p>
-      <div class="testimonial-author">
-        <div class="testimonial-avatar">LB</div>
-        <div>
-          <strong>Lina B.</strong>
-          <div style="color:var(--text-secondary); font-size:14px;">Business Owner • Constantine</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="slider-dots">
-    <span class="dot active"></span>
-    <span class="dot"></span>
-    <span class="dot"></span>
-  </div>
-</section>
-
-<!-- SECURITY -->
-<section class="security-new">
-  <div style="text-align:center; margin-bottom:50px;">
-    <div class="security-shield-icon">
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+      <svg class="filter-svg" xmlns="http://www.w3.org/2000/svg" version="1.1">
+        <filter id="blurFilter">
+          <feGaussianBlur stdDeviation="5"></feGaussianBlur>
+          <feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 19 -9"></feColorMatrix>
+        </filter>
       </svg>
+      <label class="dark-mode-label">
+        <div class="switch">
+          <input id="darkToggleInput" type="checkbox">
+          <div class="toggle-container">
+            <div class="thumb"></div>
+            <div class="toggle-icon-left"></div>
+            <div class="toggle-icon-right"></div>
+          </div>
+        </div>
+      </label>
     </div>
-    <h2 style="font-size:36px; margin-bottom:10px; color:var(--text-primary);">Trust, Security & Transparency</h2>
+  </nav>
+
+  <!-- HERO -->
+  <div class="hero page">
+    <h1>Fast, Local, <span>Trusted Delivery</span></h1>
+    <p>Wassali connects you with trusted local deliverers for fast, affordable, and secure deliveries.</p>
+
+    <div class="hero-buttons">
+      <button class="btn-primary" onclick="openAuthModal('register')">Get Started →</button>
+      <button class="btn-outline" onclick="openAuthModal('register', 'deliverer')">Become a Deliverer</button>
+    </div>
   </div>
-  
-  <div class="security-cards-grid">
-    <div class="security-feature-card">
-      <div class="feature-icon green-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-          <circle cx="12" cy="7" r="4"></circle>
-        </svg>
+
+  <!-- HOW IT WORKS -->
+  <section id="how">
+    <h2>How It Works</h2>
+    <p class="subtitle">Three simple steps</p>
+    <div class="cards">
+      <div class="card">
+        <div class="step">1</div>
+        <h3>Create Delivery</h3>
+        <p>Enter pickup and drop-off locations</p>
       </div>
-      <h3>ID Verification</h3>
-      <p>All deliverers must submit and verify their ID cards before accepting orders.</p>
+      <div class="card">
+        <div class="step">2</div>
+        <h3>Deliverer Accepts</h3>
+        <p>A verified local deliverer takes the job</p>
+      </div>
+      <div class="card">
+        <div class="step">3</div>
+        <h3>Delivered</h3>
+        <p>Your parcel arrives safely and fast</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHY CHOOSE -->
+  <section id="why">
+    <h2>Why Choose Wassali?</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="icon green">📈</div>
+        <h3>Affordable</h3>
+        <p>Lower costs with local deliveries</p>
+      </div>
+      <div class="card">
+        <div class="icon blue">👥</div>
+        <h3>Community</h3>
+        <p>Built around trust and neighborhoods</p>
+      </div>
+      <div class="card">
+        <div class="icon green">🍃</div>
+        <h3>Eco-Friendly</h3>
+        <p>Less distance, less pollution</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICE CALCULATOR -->
+  <section class="calculator">
+    <h2>
+      <i class="fa-solid fa-circle-dollar-to-slot"
+        style="display: inline-block; vertical-align: middle; margin-right: 8px; font-size: 32px; color: var(--accent);"></i>
+      Calculate Your Delivery Cost
+    </h2>
+    <p class="subtitle">Get an instant price estimate</p>
+
+    <div class="calculator-box">
+      <div class="form-group">
+        <label>Distance (km)</label>
+        <input type="number" id="calcDistance" placeholder="Enter distance" min="1" max="50" value="5">
+      </div>
+      <div class="form-group">
+        <label>Package Size</label>
+        <select id="calcSize">
+          <option value="500">Small (< 5kg) - Base 500 DA</option>
+          <option value="800">Medium (5-15kg) - Base 800 DA</option>
+          <option value="1200">Large (> 15kg) - Base 1200 DA</option>
+        </select>
+      </div>
+
+      <button class="btn-primary" style="width:100%;" onclick="calculatePrice()">Calculate Price</button>
+
+      <div class="price-result" id="priceResult">
+        <div class="price-amount">0 DA</div>
+        <div class="price-label">Estimated delivery cost</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TESTIMONIALS -->
+  <section id="testimonials">
+    <h2>What Our Users Say</h2>
+    <p class="subtitle">Real experiences from real people</p>
+
+    <div class="testimonials-slider">
+      <div class="testimonial active">
+        <p class="testimonial-text">"Wassali made sending packages so easy! The deliverer was professional and my parcel
+          arrived within 2 hours. Highly recommend!"</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">SA</div>
+          <div>
+            <strong>Sarah A.</strong>
+            <div style="color:var(--text-secondary); font-size:14px;">Client • Algiers</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial">
+        <p class="testimonial-text">"As a deliverer, Wassali gives me flexible earning opportunities. The app is simple
+          and I love being part of the local community."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">KM</div>
+          <div>
+            <strong>Karim M.</strong>
+            <div style="color:var(--text-secondary); font-size:14px;">Deliverer • Oran</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial">
+        <p class="testimonial-text">"Fast, affordable, and reliable! I use Wassali for all my business deliveries now.
+          The tracking feature is excellent."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">LB</div>
+          <div>
+            <strong>Lina B.</strong>
+            <div style="color:var(--text-secondary); font-size:14px;">Business Owner • Constantine</div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="security-feature-card">
-      <div class="feature-icon blue-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-          <circle cx="12" cy="10" r="3"></circle>
-        </svg>
-      </div>
-      <h3>GPS Tracking</h3>
-      <p>Real-time location tracking during active deliveries for complete transparency.</p>
+    <div class="slider-dots">
+      <span class="dot active"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
     </div>
+  </section>
 
-    <div class="security-feature-card">
-      <div class="feature-icon purple-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <!-- SECURITY -->
+  <section class="security-new">
+    <div style="text-align:center; margin-bottom:50px;">
+      <div class="security-shield-icon">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
         </svg>
       </div>
-      <h3>Admin Supervision</h3>
-      <p>Platform administrators monitor all activities to prevent fraud and ensure quality.</p>
+      <h2 style="font-size:36px; margin-bottom:10px; color:var(--text-primary);">Trust, Security & Transparency</h2>
     </div>
 
-    <div class="security-feature-card">
-      <div class="feature-icon green-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-          <polyline points="22 4 12 14.01 9 11.01"></polyline>
-        </svg>
+    <div class="security-cards-grid">
+      <div class="security-feature-card">
+        <div class="feature-icon green-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </div>
+        <h3>ID Verification</h3>
+        <p>All deliverers must submit and verify their ID cards before accepting orders.</p>
       </div>
-      <h3>Verified Badges</h3>
-      <p>See at a glance which deliverers are verified and approved by Wassali.</p>
+
+      <div class="security-feature-card">
+        <div class="feature-icon blue-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+          </svg>
+        </div>
+        <h3>GPS Tracking</h3>
+        <p>Real-time location tracking during active deliveries for complete transparency.</p>
+      </div>
+
+      <div class="security-feature-card">
+        <div class="feature-icon purple-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+        </div>
+        <h3>Admin Supervision</h3>
+        <p>Platform administrators monitor all activities to prevent fraud and ensure quality.</p>
+      </div>
+
+      <div class="security-feature-card">
+        <div class="feature-icon green-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <h3>Verified Badges</h3>
+        <p>See at a glance which deliverers are verified and approved by Wassali.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq">
+    <h2>Frequently Asked Questions</h2>
+    <p class="subtitle">Everything you need to know</p>
+
+    <div class="faq-container">
+      <div class="faq-item">
+        <div class="faq-question">
+          <span>How does Wassali work?</span>
+          <span class="faq-icon">▼</span>
+        </div>
+        <div class="faq-answer">
+          <div class="faq-answer-content">
+            Wassali connects clients who need deliveries with local, verified deliverers. Simply create a delivery
+            request, wait for a deliverer to accept, and track your parcel in real-time until it's delivered.
+          </div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question">
+          <span>How much does delivery cost?</span>
+          <span class="faq-icon">▼</span>
+        </div>
+        <div class="faq-answer">
+          <div class="faq-answer-content">
+            Pricing is based on distance and package size. Small packages under 5km typically cost 500-800 DA. You'll
+            see the estimated price before confirming your delivery.
+          </div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question">
+          <span>How are deliverers verified?</span>
+          <span class="faq-icon">▼</span>
+        </div>
+        <div class="faq-answer">
+          <div class="faq-answer-content">
+            All deliverers must submit valid ID documentation which is reviewed by our admin team. Only verified
+            deliverers can accept delivery requests on the platform.
+          </div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question">
+          <span>Can I track my delivery?</span>
+          <span class="faq-icon">▼</span>
+        </div>
+        <div class="faq-answer">
+          <div class="faq-answer-content">
+            Yes! Once a deliverer accepts your request, you can track the status in real-time through your dashboard.
+            You'll see when they pick up the package and when it's out for delivery.
+          </div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question">
+          <span>What if something goes wrong?</span>
+          <span class="faq-icon">▼</span>
+        </div>
+        <div class="faq-answer">
+          <div class="faq-answer-content">
+            We have 24/7 support available. Contact us through the app and our team will help resolve any issues. We
+            also have insurance coverage for lost or damaged items.
+          </div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question">
+          <span>How do I become a deliverer?</span>
+          <span class="faq-icon">▼</span>
+        </div>
+        <div class="faq-answer">
+          <div class="faq-answer-content">
+            Sign up, choose "Deliver Parcels" as your role, and submit your ID for verification. Once approved, you can
+            start accepting delivery requests and earning money!
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <h2>Ready to Get Started?</h2>
+    <p>Join the Wassali community and experience smarter local delivery</p>
+    <button class="btn-primary" onclick="openAuthModal('register')">Create Your Account →</button>
+  </section>
+
+  <!-- LIVE CHAT WIDGET -->
+  <div class="chat-widget">
+    <div class="chat-bubble">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      </svg>
+    </div>
+    <div class="chat-badge">1</div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="main-footer">
+    <div class="footer-grid">
+      <div>
+        <h3>
+          <svg style="display: inline-block; vertical-align: middle; margin-right: 6px;" width="24" height="24"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+              d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+            </path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+          </svg>
+          Wassali
+        </h3>
+        <p>Fast, local, and trusted delivery platform connecting communities.</p>
+      </div>
+      <div>
+        <h4>Company</h4>
+        <a href="#">About</a>
+        <a href="#">Contact</a>
+        <a href="#">Terms & Privacy</a>
+      </div>
+      <div>
+        <h4>Connect</h4>
+        <a href="#">Twitter</a>
+        <a href="#">Facebook</a>
+        <a href="#">Instagram</a>
+      </div>
+    </div>
+    <p class="copyright">
+      © 2026 Wassali. All rights reserved.
+    </p>
+  </footer>
+
+  <!-- Auth Modal -->
+  <div id="authModal" class="auth-modal" style="display: none;">
+    <div class="auth-modal-content">
+      <div class="auth-modal-header">
+        <h3 id="authModalTitle">Login</h3>
+        <button class="auth-modal-close" onclick="closeAuthModal()">&times;</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="auth-tabs">
+        <button id="loginTab" class="auth-tab active" onclick="switchAuthTab('login')">Login</button>
+        <button id="registerTab" class="auth-tab" onclick="switchAuthTab('register')">Register</button>
+      </div>
+
+      <!-- Login Form -->
+      <div id="loginForm" class="auth-form active">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="loginUsername" placeholder="Enter username">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="loginPassword" placeholder="Enter password">
+        </div>
+        <button class="btn-primary" style="width:100%;" onclick="handleLogin()">Login</button>
+      </div>
+
+      <!-- Register Form -->
+      <div id="registerForm" class="auth-form">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="regUsername" placeholder="Choose username (min 3 chars)">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="regEmail" placeholder="Enter email">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="regPassword" placeholder="Create password">
+          <small style="color: var(--text-secondary); font-size: 12px;">Min 5 chars, include number & special char
+            (!@#$%^&*)</small>
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="regRole">
+            <option value="client">Client</option>
+            <option value="deliverer">Deliverer</option>
+          </select>
+        </div>
+        <button class="btn-primary" style="width:100%;" onclick="handleRegister()">Register</button>
+      </div>
     </div>
   </div>
-</section>
 
-<!-- FAQ -->
-<section id="faq">
-  <h2>Frequently Asked Questions</h2>
-  <p class="subtitle">Everything you need to know</p>
-  
-  <div class="faq-container">
-    <div class="faq-item">
-      <div class="faq-question">
-        <span>How does Wassali work?</span>
-        <span class="faq-icon">▼</span>
-      </div>
-      <div class="faq-answer">
-        <div class="faq-answer-content">
-          Wassali connects clients who need deliveries with local, verified deliverers. Simply create a delivery request, wait for a deliverer to accept, and track your parcel in real-time until it's delivered.
-        </div>
-      </div>
-    </div>
-
-    <div class="faq-item">
-      <div class="faq-question">
-        <span>How much does delivery cost?</span>
-        <span class="faq-icon">▼</span>
-      </div>
-      <div class="faq-answer">
-        <div class="faq-answer-content">
-          Pricing is based on distance and package size. Small packages under 5km typically cost 500-800 DA. You'll see the estimated price before confirming your delivery.
-        </div>
-      </div>
-    </div>
-
-    <div class="faq-item">
-      <div class="faq-question">
-        <span>How are deliverers verified?</span>
-        <span class="faq-icon">▼</span>
-      </div>
-      <div class="faq-answer">
-        <div class="faq-answer-content">
-          All deliverers must submit valid ID documentation which is reviewed by our admin team. Only verified deliverers can accept delivery requests on the platform.
-        </div>
-      </div>
-    </div>
-
-    <div class="faq-item">
-      <div class="faq-question">
-        <span>Can I track my delivery?</span>
-        <span class="faq-icon">▼</span>
-      </div>
-      <div class="faq-answer">
-        <div class="faq-answer-content">
-          Yes! Once a deliverer accepts your request, you can track the status in real-time through your dashboard. You'll see when they pick up the package and when it's out for delivery.
-        </div>
-      </div>
-    </div>
-
-    <div class="faq-item">
-      <div class="faq-question">
-        <span>What if something goes wrong?</span>
-        <span class="faq-icon">▼</span>
-      </div>
-      <div class="faq-answer">
-        <div class="faq-answer-content">
-          We have 24/7 support available. Contact us through the app and our team will help resolve any issues. We also have insurance coverage for lost or damaged items.
-        </div>
-      </div>
-    </div>
-
-    <div class="faq-item">
-      <div class="faq-question">
-        <span>How do I become a deliverer?</span>
-        <span class="faq-icon">▼</span>
-      </div>
-      <div class="faq-answer">
-        <div class="faq-answer-content">
-          Sign up, choose "Deliver Parcels" as your role, and submit your ID for verification. Once approved, you can start accepting delivery requests and earning money!
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- CTA -->
-<section class="cta">
-  <h2>Ready to Get Started?</h2>
-  <p>Join the Wassali community and experience smarter local delivery</p>
-  <button class="btn-primary">Create Your Account →</button>
-</section>
-
-<!-- LIVE CHAT WIDGET -->
-<div class="chat-widget">
-  <div class="chat-bubble">
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-    </svg>
-  </div>
-  <div class="chat-badge">1</div>
-</div>
-
-<!-- FOOTER -->
-<footer class="main-footer">
-  <div class="footer-grid">
-    <div>
-      <h3>
-        <svg style="display: inline-block; vertical-align: middle; margin-right: 6px;" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-          <line x1="12" y1="22.08" x2="12" y2="12"></line>
-        </svg>
-        Wassali
-      </h3>
-      <p>Fast, local, and trusted delivery platform connecting communities.</p>
-    </div>
-    <div>
-      <h4>Company</h4>
-      <a href="#">About</a>
-      <a href="#">Contact</a>
-      <a href="#">Terms & Privacy</a>
-    </div>
-    <div>
-      <h4>Connect</h4>
-      <a href="#">Twitter</a>
-      <a href="#">Facebook</a>
-      <a href="#">Instagram</a>
-    </div>
-  </div>
-  <p class="copyright">
-    © 2026 Wassali. All rights reserved.
-  </p>
-</footer>
-
-<script src="project.js"></script>
+  <script src="{{ url_for('static', filename='project.js') }}"></script>
 </body>
+
 </html>

@@ -9,11 +9,6 @@ def crypt_password(password: str) -> str:
     return generate_password_hash(password, method="pbkdf2:sha256", salt_length=8)
 
 
-# create verify password function
-def verify_password(password: str, hashed_password: str) -> bool:
-    return check_password_hash(hashed_password, password)
-
-
 # verify if password has digits_char AND special_char
 def has_digit_and_special(password: str) -> bool:
     special_char = "[@_!#$%^&*()<>?\\/|}{~:]"
@@ -36,6 +31,17 @@ def is_strong_password(password: str) -> bool:
     return True
 
 
+def unique_email(email: str) -> dict:
+    if email is None:
+        return {"success": False, "message": "email can't be empty"}
+
+    find_available_emails = users_collection.find_one({"email": email})
+    if not find_available_emails:
+        return {"success": True, "email": email}
+    else:
+        return {"success": False, "message": "email already exist"}
+
+
 # verify users data before saving in database (username , email , password)
 def verify_users_data(username: str, email: str, password: str) -> None:
     if len(username) < 3:
@@ -53,7 +59,6 @@ def verify_users_data(username: str, email: str, password: str) -> None:
 # create identity class for each user
 class Identity:
     def __init__(self, username: str, email: str, password: str) -> None:
-
         verify_users_data(username, email, password)
 
         self.username = username
@@ -62,12 +67,6 @@ class Identity:
         # create a unique random id using uuid lib from python
         self.id = str(uuid.uuid4())
 
-    def __repr__(self) -> str:
-        """Debugging representation showing key delivery info."""
-        return (
-            f"Identity(username={self.username} , email={self.email} , id : {self.id})"
-        )
-
 
 # create user class for each user and set the basic user operations register , delete , find and display the database
 class User:
@@ -75,9 +74,6 @@ class User:
         self.identity = identity
         self.role = role
         self.status = status
-
-    def __repr__(self) -> str:
-        return f"User(identity={self.identity}, role={self.role}, status={self.status})"
 
     def to_dict(self) -> dict:
         """Converts the User object into a Dictionary for MongoDB."""
@@ -93,6 +89,9 @@ class User:
     def register(self) -> dict:
         """Saves the user to the database"""
         data: dict = self.to_dict()
+        email_check = unique_email(data["email"])
+        if not email_check["success"]:
+            return email_check
         try:
             users_collection.insert_one(data)
             return {
@@ -114,10 +113,8 @@ class User:
             return {"success": False, "message": f"User {username} does not exist."}
         if user["status"] == Status.SUSPENDED.value:
             return {"success": False, "message": f"User {username} is suspended"}
-        elif user["status"] == Status.PENDING.value:
-            return {"success": False, "message": f"User {username} is pending"}
 
-        if not verify_password(password, user["password"]):
+        if not check_password_hash(user["password"], password):
             return {
                 "success": False,
                 "message": f"Incorrect password for user {username}",
@@ -125,23 +122,25 @@ class User:
 
         return {
             "success": True,
+            "_id": str(user["_id"]),
             "role": user["role"],
             "username": user["username"],
-            "_id": str(user["_id"]),
             "message": f"User {username} logged in successfully",
         }
 
     @staticmethod
-    def get_all_users(role: Role) -> dict:
+    def get_all_users(request_role: Role) -> dict:
         """Returns a list of all users instead of printing them."""
-        if role == Role.ADMIN:
-            users_list = list(users_collection.find())
-            return {"success": True, "users": users_list}
-        else:
+        if request_role != Role.ADMIN:
             return {
                 "success": False,
                 "message": "You are not authorized to view this data.",
             }
+
+        users_list = list(users_collection.find())
+        for u in users_list:
+            u["_id"] = str(u["_id"])
+        return {"success": True, "users": users_list}
 
     @staticmethod
     def find_user(id: str) -> dict:
@@ -156,9 +155,10 @@ class User:
     def change_username(old_username: str, new_username: str) -> dict:
         try:
             if len(new_username) < 3:
-                raise ValueError(
-                    f"Username : {new_username} must be at least 3 characters long."
-                )
+                return {
+                    "success": False,
+                    "message": f"Username {new_username} must be at least 3 characters.",
+                }
 
             find_username = users_collection.find_one({"username": old_username})
             if find_username is None:
@@ -177,15 +177,14 @@ class User:
         except DuplicateKeyError as e:
             return {"success": False, "message": str(e)}
 
-    """add change password function"""
-
     @staticmethod
     def change_password(username: str, old_password: str, new_password: str) -> dict:
+        """Change user password after verifying old password."""
         username_exist = users_collection.find_one({"username": username})
         if username_exist is None:
             return {"success": False, "message": f"User {username} does not exist."}
         elif not is_strong_password(new_password):
-            raise ValueError(f"Password {new_password} is not strong enough.")
+            return {"success": False, "message": "New password is not strong enough."}
 
         if check_password_hash(username_exist["password"], old_password):
             new_hashed_password = crypt_password(new_password)
@@ -199,10 +198,9 @@ class User:
         else:
             return {"success": False, "message": "password is incorrect."}
 
-    """"deletes a user only if the password and username are correct"""
-
     @staticmethod
     def delete(username: str, password: str, role: Role) -> dict:
+        """Deletes a user only if the caller is admin and credentials are correct."""
         if role == Role.ADMIN:
             user_data = users_collection.find_one({"username": username})
             if user_data is None:
