@@ -10,13 +10,20 @@ users_collection = db["users"]
 deliveries_collection = db["deliveries"]
 
 
-# usernames must be unique to prevent duplicate
+# usernames and emails must be unique to prevent duplicate
 users_collection.create_index("username", unique=True)
+users_collection.create_index("email", unique=True)
+
+
+# add indexes for deliveries collection for better performance
+deliveries_collection.create_index("client_id")
+deliveries_collection.create_index("deliverer_id")
+deliveries_collection.create_index("status")
 
 app = Flask(__name__)
 
 # enable CORS in flask server to run in the frontend
-CORS(app) 
+CORS(app)
 
 
 # define 3 types of users check rayan's wassali.pdf file
@@ -33,9 +40,10 @@ class Status(StrEnum):
     SUSPENDED = "suspended"
 
 
-# define 3 types for the delivery status
+# define 5 types for the delivery status
 class DeliveryStatus(StrEnum):
     PENDING = "pending"
     ACCEPTED = "accepted"
     REJECTED = "rejected"
     DELIVERED = "delivered"
+    CANCELLED = "cancelled"
