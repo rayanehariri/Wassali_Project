@@ -5,6 +5,7 @@ import About from "./Home/About"
 import Contact from "./Home/Contact"
 import FAQ from "./Home/FAQ"
 import DashPage from "./AdminDash/DashPage"
+import DoP from "./AdminDash/Dashover/DashOverPage"
 
 function App() {
 
@@ -15,6 +16,7 @@ function App() {
      <Route path="about" element={<About/>}/>
      <Route path="contact" element={<Contact/>}/>
      <Route path="dashboard" element={<DashPage/>}>
+     <Route index element={<DoP/>}/>
      </Route>
     </Routes>
   )

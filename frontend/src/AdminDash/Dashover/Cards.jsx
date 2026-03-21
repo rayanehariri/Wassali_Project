@@ -39,17 +39,20 @@ const stats = [
 
 export default function Cards() {
   return (
-    <div className="grid grid-cols-1 !py-7 !px-3 sm:grid-cols-2 xl:grid-cols-4 gap-4 p-6">
+    <div className="grid grid-cols-1 !py-7 !px-5 sm:grid-cols-2 xl:grid-cols-4 gap-4 p-6">
       {stats.map(({ label, value, change, positive, icon: Icon, iconColor, suffix }) => (
         <Card
   key={label}
-  style={{
-    background: "#1E293B",
+    style={{
+    background: `
+      radial-gradient(circle at top right, rgba(59, 130, 246, 0.15) 0%, transparent 60%),
+      #1E293B
+    `,
     border: "1px solid #33415580",
     backdropFilter: "blur(40px)",
     WebkitBackdropFilter: "blur(40px)",
     borderRadius: "12px",
-    width:"300px"
+    flexShrink: 0,
   }}
 >
   <CardContent  className="!py-4 !px-6 ">  {/* ← use style not className */}

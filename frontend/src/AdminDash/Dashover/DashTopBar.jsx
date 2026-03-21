@@ -21,7 +21,7 @@ export default function DashTop(){
     return(
          <header className="flex items-center justify-between !px-7 !py-5 bg-[#0f1117] border-b border-[#1e2d3d]">
 
-      <h1 className="text-[18px] font-semibold text-slate-100">Dashboard Overview</h1>
+      <h1 className="text-[20px] font-semibold text-slate-100">Dashboard Overview</h1>
 
       <div className="flex items-center gap-3">
 

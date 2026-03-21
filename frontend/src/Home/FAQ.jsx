@@ -27,7 +27,7 @@ export default function FAQ(){
         <span>{faq.Question}</span>
         <span className="faq-icon" >▼</span>
       </div>
-     {active===i &&( <div class="faq-answer">
+     {active===i &&( <div className="faq-answer">
         <div className="faq-answer-content">
           {faq.Answer}
         </div>
