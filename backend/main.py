@@ -1,20 +1,23 @@
-# Save this as app.py
-from flask import Flask, jsonify
-from models import User
+from __init__ import app
+from flask import render_template
+from routes.admin import admin
+from routes.auth import auth
+from routes.client import client
+from routes.deliverer import deliverer
 
-app = Flask(__name__)
+# create the blueprints for auth and admin
+app.register_blueprint(admin, url_prefix="/api/admin")
+app.register_blueprint(auth, url_prefix="/api/auth")
+app.register_blueprint(client, url_prefix="/api/client")
+app.register_blueprint(deliverer, url_prefix="/api/deliverer")
 
 
-# Create a route for the home page
+# Create a route for the homepage
 @app.route("/")
-# create a home page
 def home():
-    users_list = User.get_all_users()
-    for u in users_list:
-        u["_id"] = str(u["_id"])
-
-    return jsonify(users_list)
+    return render_template("project.html")
 
 
+# Run the app
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)

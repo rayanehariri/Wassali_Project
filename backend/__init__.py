@@ -1,1 +1,49 @@
+from flask import Flask
+from enum import StrEnum
+from pymongo import MongoClient
+from flask_cors import CORS
 
+# Create a local mongodb database server
+wassali_db = MongoClient("mongodb://127.0.0.1:27017")
+db = wassali_db["wassali_db"]
+users_collection = db["users"]
+deliveries_collection = db["deliveries"]
+
+
+# usernames and emails must be unique to prevent duplicate
+users_collection.create_index("username", unique=True)
+users_collection.create_index("email", unique=True)
+
+
+# add indexes for deliveries collection for better performance
+deliveries_collection.create_index("client_id")
+deliveries_collection.create_index("deliverer_id")
+deliveries_collection.create_index("status")
+
+app = Flask(__name__)
+
+# enable CORS in flask server to run in the frontend
+CORS(app)
+
+
+# define 3 types of users check rayan's wassali.pdf file
+class Role(StrEnum):
+    ADMIN = "admin"
+    CLIENT = "client"
+    DELIVERER = "deliverer"
+
+
+# define 3 types of users check rayan's wassali.pdf file pending / active / suspended
+class Status(StrEnum):
+    PENDING = "pending"
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+
+
+# define 5 types for the delivery status
+class DeliveryStatus(StrEnum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
