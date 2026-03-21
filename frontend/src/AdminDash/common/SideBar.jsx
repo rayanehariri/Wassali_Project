@@ -42,8 +42,8 @@ export default function SideBar() {
       <Sidebar className="!bg-[#0f1117] border-r border-[#1e2d3d]">
  
         
-        <SidebarHeader className="!px-3 !py-5 !pt-5 !pb-4">
-         <div className="site-logo flex items-center gap-1.5" >  {/* renamed from .logo */}
+        <SidebarHeader className="!px-5 !py-8 !pt-6 !pb-6.5">
+         <div className="site-logo flex items-center gap-1.5 !text-3xl " >  {/* renamed from .logo */}
           <svg
             style={{
               display: "inline-block",
@@ -72,7 +72,7 @@ export default function SideBar() {
         </SidebarHeader>
  
         {/* ── Nav items ── */}
-        <SidebarContent className="!px-3">
+        <SidebarContent className="!px-5">
           <SidebarMenu className="!gap-0.5">
             {navItems.map(({ label, icon: Icon, id }) => (
               <SidebarMenuItem key={id}>
