@@ -4,7 +4,7 @@ from pymongo.errors import DuplicateKeyError
 
 
 class Delivery:
-    """Represents a delivery request with full lifecycle management."""
+    """Manages delivery lifecycle: create, accept, reject, cancel, mark delivered."""
 
     def __init__(
         self,
@@ -24,11 +24,14 @@ class Delivery:
         self.price = price
 
     def __repr__(self) -> str:
-        """Debugging representation showing delivery info."""
-        return f"Delivery({self.status}, {self.pickup_address}, {self.dropoff_address}, {self.description_of_order}, {self.price})"
+        """Debug representation of delivery."""
+        return (
+            f"Delivery({self.status}, {self.pickup_address}, "
+            f"{self.dropoff_address}, {self.description_of_order}, {self.price})"
+        )
 
     def to_dict(self) -> dict:
-        """Converts the Delivery object into a Dictionary for MongoDB."""
+        """Convert Delivery object to MongoDB document."""
         return {
             "_id": self.id,
             "client_id": self.client_id,
@@ -41,11 +44,10 @@ class Delivery:
         }
 
     def create(self) -> dict:
-        """Save delivery to database. Returns success status and message."""
-        delivery_data: dict = self.to_dict()
+        """Save delivery to database."""
         try:
-            deliveries_collection.insert_one(delivery_data)
-            return {"success": True, "message": " Delivery created successfully"}
+            deliveries_collection.insert_one(self.to_dict())
+            return {"success": True, "message": "Delivery created successfully"}
         except DuplicateKeyError:
             return {"success": False, "message": "Delivery already exists"}
         except Exception as e:
@@ -53,7 +55,7 @@ class Delivery:
 
     @staticmethod
     def accept(delivery_id: str, deliverer_id: str) -> dict:
-        """Assign deliverer to a pending delivery. Fails if delivery doesn't exist or isn't pending."""
+        """Assign deliverer to a pending delivery."""
         try:
             result = deliveries_collection.find_one_and_update(
                 {"_id": delivery_id, "status": DeliveryStatus.PENDING.value},
@@ -64,32 +66,26 @@ class Delivery:
                     }
                 },
             )
-
-            if result is None:
+            if not result:
                 delivery = deliveries_collection.find_one({"_id": delivery_id})
-                if delivery is None:
+                if not delivery:
                     return {"success": False, "message": "Delivery does not exist"}
-                else:
-                    return {"success": False, "message": "Delivery is not pending"}
-
-            return {
-                "success": True,
-                "message": "Delivery accepted successfully",
-            }
-
+                return {"success": False, "message": "Delivery is not pending"}
+            return {"success": True, "message": "Delivery accepted successfully"}
         except Exception as e:
             return {"success": False, "message": str(e)}
 
     @staticmethod
     def reject_by_admin(delivery_id: str, admin_id: str, reason: str) -> dict:
+        """Reject a delivery by admin with reason."""
         admin = users_collection.find_one({"_id": admin_id})
-        if admin is None:
+        if not admin:
             return {"success": False, "message": "Admin not found"}
         if admin["role"] != Role.ADMIN.value:
             return {"success": False, "message": "Admin only privileges"}
 
         delivery = deliveries_collection.find_one({"_id": delivery_id})
-        if delivery is None:
+        if not delivery:
             return {"success": False, "message": "Delivery not found"}
 
         deliveries_collection.update_one(
@@ -106,8 +102,9 @@ class Delivery:
 
     @staticmethod
     def cancel_by_client(delivery_id: str, client_id: str) -> dict:
+        """Cancel a pending delivery by the owning client."""
         delivery = deliveries_collection.find_one({"_id": delivery_id})
-        if delivery is None:
+        if not delivery:
             return {"success": False, "message": "Delivery not found"}
 
         if delivery["client_id"] != client_id:
@@ -129,8 +126,9 @@ class Delivery:
 
     @staticmethod
     def drop_by_deliverer(delivery_id: str, deliverer_id: str) -> dict:
+        """Drop an accepted delivery by the assigned deliverer."""
         delivery = deliveries_collection.find_one({"_id": delivery_id})
-        if delivery is None:
+        if not delivery:
             return {"success": False, "message": "Delivery not found"}
 
         if delivery["deliverer_id"] != deliverer_id:
@@ -153,15 +151,13 @@ class Delivery:
 
     @staticmethod
     def mark_as_delivered(delivery_id: str) -> dict:
-        """Mark accepted delivery as completed."""
+        """Mark an accepted delivery as delivered."""
         delivery = deliveries_collection.find_one({"_id": delivery_id})
-        if delivery is None:
+        if not delivery:
             return {"success": False, "message": "Delivery not found"}
+
         if delivery["status"] != DeliveryStatus.ACCEPTED.value:
-            return {
-                "success": False,
-                "message": "Delivery is not accepted",
-            }
+            return {"success": False, "message": "Delivery is not accepted"}
 
         deliveries_collection.find_one_and_update(
             {"_id": delivery_id}, {"$set": {"status": DeliveryStatus.DELIVERED.value}}
@@ -171,31 +167,24 @@ class Delivery:
     @staticmethod
     def track(delivery_id: str) -> dict:
         """Get current status and details of a delivery."""
-        delivery_data = deliveries_collection.find_one({"_id": delivery_id})
-        if delivery_data is None:
+        delivery = deliveries_collection.find_one({"_id": delivery_id})
+        if not delivery:
             return {"success": False, "message": "Delivery does not exist"}
-        else:
-            return {
-                "success": True,
-                "delivery": delivery_data,
-            }
+        return {"success": True, "delivery": delivery}
 
     @staticmethod
     def find_available() -> dict:
         """Get all pending deliveries available for acceptance."""
-        delivery_data = deliveries_collection.find(
-            {"status": DeliveryStatus.PENDING.value}
+        deliveries = list(
+            deliveries_collection.find({"status": DeliveryStatus.PENDING.value})
         )
-        results = list(delivery_data)
-        if len(results) == 0:
+        if not deliveries:
             return {"success": False, "message": "No delivery available"}
-        else:
-            return {"success": True, "deliveries": results}
+        return {"success": True, "deliveries": deliveries}
 
 
 def main() -> None:
-    # test the function sees the lifecycle of the delivery
-    # 1. Create a delivery
+    """Test delivery lifecycle."""
     d = Delivery(
         client_id="client-uuid-123",
         pickup_address="Oran",
@@ -204,23 +193,11 @@ def main() -> None:
         price=500.00,
     )
     print(d.create())
-
-    # 2. Find available deliveries
     print(Delivery.find_available())
-
-    # 3. Track it
     print(Delivery.track(d.id))
-
-    # 4. Accept it
     print(Delivery.accept(d.id, "fake-deliverer-uuid-456"))
-
-    # 5. Try to accept again (should fail)
     print(Delivery.accept(d.id, "fake-deliverer-uuid-456"))
-
-    # 6. Mark as delivered
     print(Delivery.mark_as_delivered(d.id))
-
-    # 7. Track again to confirm status is delivered
     print(Delivery.track(d.id))
 
 
