@@ -1,16 +1,15 @@
 from __init__ import Status, Role
 from models import User, Identity
-from flask import Blueprint,  jsonify, request
-
+from flask import Blueprint, jsonify, request
 
 auth = Blueprint("auth", __name__)
 
 
-# create the route for registering a user
 @auth.route("/register/", methods=["POST"])
 def register():
+    """Register a new user."""
     data = request.get_json()
-    if data is None:
+    if not data:
         return jsonify({"success": False, "message": "Request body is required"}), 400
 
     try:
@@ -40,13 +39,13 @@ def register():
 
 @auth.route("/login/", methods=["POST"])
 def login():
+    """Authenticate user with username and password."""
     data = request.get_json()
-    if data is None:
+    if not data:
         return jsonify({"success": False, "message": "Request body is required"}), 400
 
     username = data.get("username")
     password = data.get("password")
-
     if not username or not password:
         return jsonify(
             {"success": False, "message": "username and password are required"}
@@ -55,8 +54,10 @@ def login():
     result = User.login(username, password)
     return jsonify(result), 200 if result["success"] else 401
 
-@auth.route("/change/username/<old_username>" , methods=["POST"])
-def change_username(old_username : str):
+
+@auth.route("/change/username/<old_username>", methods=["POST"])
+def change_username(old_username: str):
+    """Change user's username."""
     data = request.get_json()
     if not data:
         return jsonify({"success": False, "message": "Request body is required"}), 400
@@ -65,13 +66,12 @@ def change_username(old_username : str):
     if not new_username:
         return jsonify({"success": False, "message": "new_username is required"}), 400
 
-    return jsonify(User.change_username(old_username , new_username))
+    return jsonify(User.change_username(old_username, new_username))
 
 
-
-@auth.route("/change/password/<username>" , methods=["POST"])
-
-def change_password(username : str):
+@auth.route("/change/password/<username>", methods=["POST"])
+def change_password(username: str):
+    """Change user's password."""
     data = request.get_json()
     if not data:
         return jsonify({"success": False, "message": "Request body is required"}), 400
@@ -79,6 +79,9 @@ def change_password(username : str):
     old_password = data.get("old_password")
     new_password = data.get("new_password")
     if not old_password or not new_password:
-        return jsonify({"success": False, "message": "old_password and new_password are required"}), 400
+        return jsonify(
+            {"success": False, "message": "old_password and new_password are required"}
+        ), 400
+
     result = User.change_password(username, old_password, new_password)
     return jsonify(result), 200 if result["success"] else 400
