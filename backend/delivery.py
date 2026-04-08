@@ -3,7 +3,7 @@ from __init__ import Role, users_collection, deliveries_collection, DeliveryStat
 from pymongo.errors import DuplicateKeyError
 
 
-class Delivery:
+class DeliveryManager:
     """Manages delivery lifecycle: create, accept, reject, cancel, mark delivered."""
 
     def __init__(
@@ -181,25 +181,3 @@ class Delivery:
         if not deliveries:
             return {"success": False, "message": "No delivery available"}
         return {"success": True, "deliveries": deliveries}
-
-
-def main() -> None:
-    """Test delivery lifecycle."""
-    d = Delivery(
-        client_id="client-uuid-123",
-        pickup_address="Oran",
-        dropoff_address="Sidi bel abbes",
-        description_of_order="books",
-        price=500.00,
-    )
-    print(d.create())
-    print(Delivery.find_available())
-    print(Delivery.track(d.id))
-    print(Delivery.accept(d.id, "fake-deliverer-uuid-456"))
-    print(Delivery.accept(d.id, "fake-deliverer-uuid-456"))
-    print(Delivery.mark_as_delivered(d.id))
-    print(Delivery.track(d.id))
-
-
-if __name__ == "__main__":
-    main()

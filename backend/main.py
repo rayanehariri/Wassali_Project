@@ -4,13 +4,14 @@ from routes.admin import admin
 from routes.auth import auth
 from routes.client import client
 from routes.deliverer import deliverer
+from routes.location import location
 
 # Register blueprints with URL prefixes
 app.register_blueprint(admin, url_prefix="/api/admin")
 app.register_blueprint(auth, url_prefix="/api/auth")
 app.register_blueprint(client, url_prefix="/api/client")
 app.register_blueprint(deliverer, url_prefix="/api/deliverer")
-
+app.register_blueprint(location,  url_prefix="/api/location")
 
 @app.route("/")
 def home():

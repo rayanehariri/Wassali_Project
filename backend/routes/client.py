@@ -1,4 +1,4 @@
-from delivery import Delivery
+from delivery import DeliveryManager
 from __init__ import deliveries_collection, users_collection
 from flask import Blueprint, jsonify, request
 
@@ -53,7 +53,7 @@ def create_delivery_for_client():
         if error:
             return error
 
-        delivery = Delivery(
+        delivery = DeliveryManager(
             data["client_id"],
             data["pickup_address"],
             data["dropoff_address"],
@@ -91,7 +91,7 @@ def get_client_deliveries(client_id: str):
 def track_delivery(delivery_id: str):
     """Track the status of a specific delivery."""
     try:
-        result = Delivery.track(delivery_id)
+        result = DeliveryManager.track(delivery_id)
         if result["success"]:
             return jsonify(result), 200
         status = 404 if "not found" in result.get("message", "").lower() else 400
@@ -102,7 +102,7 @@ def track_delivery(delivery_id: str):
         ), 500
 
 
-@client.route("/client/cancel", methods=["DELETE"])
+@client.route("/cancel", methods=["DELETE"])
 def cancel_delivery():
     """Cancel a delivery by client."""
     try:
@@ -123,7 +123,7 @@ def cancel_delivery():
         if error:
             return error
 
-        result = Delivery.cancel_by_client(delivery_id, client_id)
+        result = DeliveryManager.cancel_by_client(delivery_id, client_id)
         return jsonify(result), 200 if result["success"] else 400
     except Exception as e:
         return jsonify(

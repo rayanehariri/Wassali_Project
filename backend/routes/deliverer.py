@@ -1,4 +1,4 @@
-from delivery import Delivery
+from delivery import DeliveryManager
 from __init__ import users_collection
 from flask import Blueprint, jsonify, request
 
@@ -11,6 +11,8 @@ def _validate_deliverer(deliverer_id: str):
         return jsonify({"success": False, "message": "deliverer not found"}), 404
     if deliverer_data.get("role") != "deliverer":
         return jsonify({"success": False, "message": "user is not a deliverer"}), 403
+    if deliverer_data.get("status") != "active":
+         return jsonify({"success": False,"message": "Account not yet approved"}), 403
     return None
 
 
@@ -18,7 +20,7 @@ def _validate_deliverer(deliverer_id: str):
 def get_available_deliveries():
     """Get all pending deliveries available for acceptance."""
     try:
-        result = Delivery.find_available()
+        result = DeliveryManager.find_available()
         if result["success"]:
             for delivery in result.get("deliveries", []):
                 if "_id" in delivery:
@@ -49,7 +51,7 @@ def accept_delivery(delivery_id: str):
         if error:
             return error
 
-        result = Delivery.accept(delivery_id, deliverer_id)
+        result = DeliveryManager.accept(delivery_id, deliverer_id)
         if result["success"]:
             return jsonify(result), 200
 
@@ -69,7 +71,7 @@ def accept_delivery(delivery_id: str):
 def mark_delivery_as_delivered(delivery_id: str):
     """Mark a delivery as delivered."""
     try:
-        result = Delivery.mark_as_delivered(delivery_id)
+        result = DeliveryManager.mark_as_delivered(delivery_id)
         if result["success"]:
             return jsonify(result), 200
 
@@ -87,7 +89,7 @@ def mark_delivery_as_delivered(delivery_id: str):
         ), 500
 
 
-@deliverer.route("/deliverer/drop", methods=["DELETE"])
+@deliverer.route("/drop", methods=["DELETE"])
 def drop_delivery():
     """Drop a delivery by the deliverer."""
     try:
@@ -109,7 +111,7 @@ def drop_delivery():
         if error:
             return error
 
-        result = Delivery.drop_by_deliverer(delivery_id, deliverer_id)
+        result = DeliveryManager.drop_by_deliverer(delivery_id, deliverer_id)
         return jsonify(result), 200 if result["success"] else 400
     except Exception as e:
         return jsonify(

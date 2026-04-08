@@ -3,10 +3,11 @@ import string
 from __init__ import users_collection, Role, Status
 from pymongo.errors import DuplicateKeyError
 from werkzeug.security import check_password_hash, generate_password_hash
+from location import get_distance , get_location_info
 
 
 def crypt_password(password: str) -> str:
-    """Hash a password using pbkdf2:sha256. method crypting"""
+    """Hash a password using pbkdf2:sha256 method crypting."""
     return generate_password_hash(password, method="pbkdf2:sha256", salt_length=8)
 
 
@@ -227,23 +228,59 @@ class User:
         return {"success": True, "message": f"User {username} deleted successfully."}
 
 
-def main() -> None:
-    """Test the User and Identity classes."""
-    admin_identity = Identity("admin", "admin@admin.dz", "admin123!")
-    client_identity = Identity("client", "client@client.com", "client123!")
-    deliverer_identity = Identity(
-        "deliverer", "deliverer@deliverer.com", "deliverer123!"
-    )
+    @staticmethod
+    def update_location(user_id: str, lat: float, lng: float) -> dict:
+        """Update a user's current location."""
+        user = users_collection.find_one({"_id": user_id})
+        if not user:
+            return {"success": False, "message": "User not found"}
 
-    admin_user = User(admin_identity, Status.ACTIVE, Role.ADMIN)
-    deliverer_user = User(deliverer_identity, Status.PENDING, Role.DELIVERER)
-    client_user = User(client_identity, Status.ACTIVE, Role.CLIENT)
+        loc = get_location_info(lat, lng)
+        if loc["country"] == "Unknown":
+            return {"success": False, "message": "Coordinates are outside Algeria"}
 
-    print(client_user.register())
-    print(deliverer_user.register())
-    print(admin_user.register())
-    print(User.delete("admin", "admin123!", Role.ADMIN))
+        users_collection.update_one(
+            {"_id": user_id},
+            {"$set": {
+                "latitude":  lat,
+                "longitude": lng,
+                "wilaya":    loc["wilaya"],
+                "country":   loc["country"],
+            }},
+        )
+        return {"success": True, "message": "Location updated", "location": loc}
 
+    @staticmethod
+    def get_user_location(user_id: str) -> dict:
+        """Get a user's current location."""
+        user = users_collection.find_one({"_id": user_id})
+        if not user:
+            return {"success": False, "message": "User not found"}
+        if "latitude" not in user or "longitude" not in user:
+            return {"success": False, "message": "Location not set for this user"}
+        return {
+            "success": True,
+            "location": {
+                "latitude":  user["latitude"],
+                "longitude": user["longitude"],
+                "wilaya":    user.get("wilaya"),
+                "country":   user.get("country"),
+            },
+        }
 
-if __name__ == "__main__":
-    main()
+    @staticmethod
+    def distance_between(user1_id: str, user2_id: str) -> dict:
+        """Calculate distance in km between two users."""
+        u1 = users_collection.find_one({"_id": user1_id})
+        u2 = users_collection.find_one({"_id": user2_id})
+        if not u1 or not u2:
+            return {"success": False, "message": "One or both users not found"}
+        if "latitude" not in u1 or "latitude" not in u2:
+            return {"success": False, "message": "One or both users have no location set"}
+        dist = get_distance(u1["latitude"], u1["longitude"], u2["latitude"], u2["longitude"])
+        return {
+            "success":     True,
+            "distance_km": dist,
+            "from":        u1.get("username"),
+            "to":          u2.get("username"),
+        }
