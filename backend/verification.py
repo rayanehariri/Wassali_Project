@@ -107,25 +107,9 @@ class VerificationCodes:
             del VerificationCodes._verification_store[key]
         verification_codes.delete_many({"expires_at": {"$lt": now}})
 
-    @staticmethod 
+    @staticmethod
 
     def cleanup_all_codes()->dict:
         """Remove all verification codes"""
         verification_codes.delete_many({})
         return {"success":True , "message":"All codes deleted"}
-
-
-if __name__ == "__main__":
-    VerificationCodes.cleanup_expired_codes()
-    print(VerificationCodes._verification_store)
-    test_code : VerificationCodes = VerificationCodes("client","client@client.com")
-    test_code2 : VerificationCodes = VerificationCodes("client2","client2@client2.com")
-    test_code3 : VerificationCodes = VerificationCodes("client3","client3@client3.com")
-    code = VerificationCodes.generate_code(test_code.user_id , test_code.email)
-    code2 = VerificationCodes.generate_code(test_code2.user_id , test_code2.email)
-    code3 = VerificationCodes.generate_code(test_code3.user_id , test_code3.email)
-    print(code)
-    print(code2)
-    print(code3)
-    print(VerificationCodes._verification_store)
-    print(VerificationCodes.cleanup_all_codes())
