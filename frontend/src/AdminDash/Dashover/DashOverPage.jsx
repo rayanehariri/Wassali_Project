@@ -1,3 +1,5 @@
+
+import { useOutletContext } from "react-router-dom";
 import DashTop from "./DashTopBar";
 import Cards from "./Cards";
 import TChart from "./TrafficCharts";
@@ -6,9 +8,10 @@ import IDVerification from "./IDVerification";
 import RecentReports from "./RecentRepo";
 
 export default function DoP(){
+const { currentUser,onLogout, addToast } = useOutletContext();
     return(
         <>
-        <DashTop/>
+        <DashTop currentUser={currentUser} onLogout={onLogout}/>
          <div className="flex flex-col">
         <Cards/>
          <div className="grid grid-cols-2 gap-4 !px-5 !py-4">

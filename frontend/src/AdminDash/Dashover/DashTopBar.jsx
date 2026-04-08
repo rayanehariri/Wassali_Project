@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/popover";
 
 
-export default function DashTop(){
+export default function DashTop({ currentUser, onLogout }){
     return(
          <header className="flex items-center justify-between !px-7 !py-5 bg-[#0f1117] border-b border-[#1e2d3d]">
 
@@ -47,22 +47,27 @@ export default function DashTop(){
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Avatar className="cursor-pointer border-2 border-[#2a3550] hover:border-blue-500 transition-colors">
-              <AvatarImage src="/avatars/admin.png" alt="Admin User" />
+              <AvatarImage src={currentUser?.avatar || "/avatars/admin.png"} alt={currentUser?.name} />
               <AvatarFallback className="bg-gradient-to-br from-blue-500 to-violet-600 text-xs font-bold text-white">
-                AU
+                {currentUser?.name?.charAt(0).toUpperCase() || "A"}
               </AvatarFallback>
             </Avatar>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="!bg-[#1e2536] !px-3 !py-3 !border-[#2a3550] !text-slate-100" align="end">
             <DropdownMenuLabel className="!text-slate-100">
-              <p className="text-sm font-semibold">Admin User</p>
-              <p className="text-xs text-slate-400 font-normal">admin@wassali.com</p>
+             <p className="text-sm font-semibold">{currentUser?.name || "Admin User"}</p>
+            <p className="text-xs text-slate-400 font-normal">{currentUser?.email || "admin@wassali.com"}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="!bg-[#2a3550]" />
             <DropdownMenuItem className="hover:!bg-[#263045] !text-slate-300 cursor-pointer">Profile</DropdownMenuItem>
             <DropdownMenuItem className="hover:!bg-[#263045] !text-slate-300 cursor-pointer">Settings</DropdownMenuItem>
             <DropdownMenuSeparator className="!bg-[#2a3550]" />
-            <DropdownMenuItem className="hover:!bg-[#263045] !text-red-400 cursor-pointer">Logout</DropdownMenuItem>
+             <DropdownMenuItem
+              onClick={onLogout} 
+              className="hover:!bg-[#263045] !text-red-400 cursor-pointer"
+            >
+              Logout
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

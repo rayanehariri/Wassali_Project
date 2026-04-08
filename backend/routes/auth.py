@@ -12,7 +12,6 @@ def register():
     data = request.get_json()
     if data is None:
         return jsonify({"success": False, "message": "Request body is required"}), 400
-
     try:
         identity = Identity(data["username"], data["email"], data["password"])
     except ValueError as e:
@@ -67,8 +66,6 @@ def change_username(old_username : str):
 
     return jsonify(User.change_username(old_username , new_username))
 
-
-
 @auth.route("/change/password/<username>" , methods=["POST"])
 
 def change_password(username : str):
@@ -82,3 +79,4 @@ def change_password(username : str):
         return jsonify({"success": False, "message": "old_password and new_password are required"}), 400
     result = User.change_password(username, old_password, new_password)
     return jsonify(result), 200 if result["success"] else 400
+
