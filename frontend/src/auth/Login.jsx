@@ -28,9 +28,9 @@ function LoginPage({ onLogin, addToast }) {
     setLoading(true);
 
     login(email, password)
-      .then(({ user }) => {
+      .then(({ user, token }) => {
         setLoading(false);
-        onLogin(user);
+         onLogin(user, token);
         addToast('success', `Welcome back, ${user.name.split(' ')[0]}!`, 'You have logged in successfully.');
       })
       .catch((err) => {

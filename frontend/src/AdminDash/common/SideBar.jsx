@@ -44,7 +44,7 @@ export default function SideBar({ currentUser, onLogout }) {
     ?? (pathname === "/dashboard" ? navItems[0] : null);
  
   return (
-    <Sidebar className="!bg-[#0f1117] border-r border-[#1e2d3d]">
+    <div className="h-full  w-[210px] min-w-[210px] max-w-[210px] bg-[#0f1117] border-r border-[#1e2d3d] flex flex-col">
  
       <SidebarHeader className="!px-5 !py-8 !pt-5 !pb-6.5">
         <div className=" logo flex items-center gap-1.5 !text-3xl">
@@ -57,7 +57,7 @@ export default function SideBar({ currentUser, onLogout }) {
       </SidebarHeader>
  
       {/* ── Nav items ── */}
-      <SidebarContent className="!px-5">
+      <SidebarContent className="!px-4">
         <SidebarMenu className="!gap-0.5">
           {navItems.map(({ label, icon: Icon, id, path }) => {
             const isActive = activeItem?.id === id;
@@ -122,6 +122,6 @@ export default function SideBar({ currentUser, onLogout }) {
         </div>
       </SidebarFooter>
  
-    </Sidebar>
+    </div>
   );
 }

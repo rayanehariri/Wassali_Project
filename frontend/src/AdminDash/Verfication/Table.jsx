@@ -1,5 +1,9 @@
 // VerificationTableSection.jsx
+// ── CHANGE from original: import useNavigate, wire "View Documents" button ───
+// Everything else is identical to your original Table.jsx.
+
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";          // ← NEW
 import { Search, Check, X, Car, CreditCard, Plane } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +51,7 @@ function avatarGradient(name) {
 }
 
 export default function VerificationTable() {
+  const navigate = useNavigate();                          // ← NEW
 
   // ── State ────────────────────────────────────────────────
   const [items, setItems]           = useState([]);
@@ -334,10 +339,11 @@ export default function VerificationTable() {
                     <TableCell>
                       <div className="flex items-center gap-2">
 
-                        {/* Context button */}
+                        {/* ── Context button — navigates to DocViewerPage ── */}   {/* ← CHANGED */}
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => navigate(`/dashboard/verification/${item.id}`)}  
                           style={{
                             background: "transparent",
                             border: "1px solid #334155",
@@ -348,6 +354,7 @@ export default function VerificationTable() {
                             height: "30px",
                             padding: "0 12px",
                             whiteSpace: "nowrap",
+                            cursor: "pointer",
                           }}
                           className="hover:!bg-[#1e2d3d] hover:!text-white"
                         >

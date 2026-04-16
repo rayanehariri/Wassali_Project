@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   DollarSign, BarChart3, Clock, TrendingUp,
   CreditCard, Wallet, Activity, AlertCircle,
@@ -16,6 +16,22 @@ import {
   Table, TableBody, TableCell,
   TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+
+// ── Breakpoint hook ───────────────────────────────────────────
+function useBreakpoint() {
+  const [bp, setBp] = useState({ isMobile: false, isTablet: false });
+  useEffect(() => {
+    const check = () =>
+      setBp({
+        isMobile: window.innerWidth < 640,
+        isTablet: window.innerWidth >= 640 && window.innerWidth < 1024,
+      });
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return bp;
+}
 
 // ── Data ─────────────────────────────────────────────────────
 const REVENUE_DATA = [
@@ -67,7 +83,6 @@ const GAINS = [
   { label: "Delivery Fees", pct: 10, color: "#eab308" },
 ];
 
-// ── Status badge ──────────────────────────────────────────────
 const statusStyle = {
   success:  { background: "rgba(16,185,129,0.15)",  color: "#10b981" },
   pending:  { background: "rgba(234,179,8,0.15)",   color: "#eab308" },
@@ -76,42 +91,31 @@ const statusStyle = {
 
 function StatusBadge({ status }) {
   return (
-    <Badge
-      style={{
-        ...statusStyle[status],
-        border: "none",
-        borderRadius: "6px",
-        fontSize: "11px",
-        fontWeight: 600,
-        padding: "3px 10px",
-        display: "flex",
-        alignItems: "center",
-        gap: "5px",
-        width: "fit-content",
-      }}
-    >
+    <Badge style={{
+      ...statusStyle[status],
+      border: "none", borderRadius: "6px",
+      fontSize: "11px", fontWeight: 600,
+      padding: "3px 10px", display: "flex",
+      alignItems: "center", gap: "5px", width: "fit-content",
+    }}>
       <span style={{ width: 6, height: 6, borderRadius: "50%", background: statusStyle[status]?.color, display: "inline-block" }} />
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </Badge>
   );
 }
 
-// ── Stat card matching dashboard style ────────────────────────
 function StatCard({ label, value, sub, color, glowColor, icon: Icon }) {
   return (
-    <Card
-      style={{
-        background: `radial-gradient(circle at top right, ${glowColor} 0%, transparent 60%), #1E293B`,
-        border: "1px solid #33415580",
-        backdropFilter: "blur(40px)",
-        WebkitBackdropFilter: "blur(40px)",
-        borderRadius: "12px",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
+    <Card style={{
+      background: `radial-gradient(circle at top right, ${glowColor} 0%, transparent 60%), #1E293B`,
+      border: "1px solid #33415580",
+      backdropFilter: "blur(40px)",
+      WebkitBackdropFilter: "blur(40px)",
+      borderRadius: "12px",
+      position: "relative",
+      overflow: "hidden",
+    }}>
       <CardContent style={{ padding: "16px" }}>
-        {/* Top row — icon + label */}
         <div className="flex items-center justify-between mb-4">
           <span className="text-sm text-slate-400 font-medium">{label}</span>
           <div style={{
@@ -122,19 +126,15 @@ function StatCard({ label, value, sub, color, glowColor, icon: Icon }) {
             <Icon size={15} color={color} />
           </div>
         </div>
-        {/* Value */}
-        <p style={{ margin: "0 0 6px", fontSize: "28px", fontWeight: 800, color:"#FFFF", lineHeight: 1 }}>
+        <p style={{ margin: "0 0 6px", fontSize: "28px", fontWeight: 800, color: "#FFFF", lineHeight: 1 }}>
           {value}
         </p>
-        {/* Sub */}
         <p style={{ margin: 0, fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>{sub}</p>
-        
       </CardContent>
     </Card>
   );
 }
 
-// ── Chart tooltip ─────────────────────────────────────────────
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
@@ -150,10 +150,11 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-// ── Payout Modal ──────────────────────────────────────────────
+// ── Payout Modal — responsive ─────────────────────────────────
 function PayoutModal({ payout, onClose, onConfirm }) {
   const [loading, setLoading]     = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const { isMobile }              = useBreakpoint();
 
   async function handleConfirm() {
     setLoading(true);
@@ -171,22 +172,31 @@ function PayoutModal({ payout, onClose, onConfirm }) {
         background: "rgba(0,0,0,0.6)",
         backdropFilter: "blur(4px)",
         display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "16px",
       }}
     >
       <div style={{
         background: "#0f1827",
         border: "1px solid rgba(59,130,246,0.2)",
         borderRadius: "20px",
-        width: "700px",
-        maxWidth: "95vw",
+        width: "100%",
+        maxWidth: "700px",
+        maxHeight: "90vh",
+        overflowY: "auto",
         display: "flex",
+        flexDirection: isMobile ? "column" : "row",
         overflow: "hidden",
         boxShadow: "0 25px 60px rgba(0,0,0,0.5)",
       }}>
 
         {/* Left panel */}
-        <div style={{ flex: 1, padding: "28px", borderRight: "1px solid rgba(255,255,255,0.06)" }}>
-          {/* Header */}
+        <div style={{
+          flex: 1,
+          padding: isMobile ? "20px" : "28px",
+          borderRight: isMobile ? "none" : "1px solid rgba(255,255,255,0.06)",
+          borderBottom: isMobile ? "1px solid rgba(255,255,255,0.06)" : "none",
+          overflowY: isMobile ? "auto" : "visible",
+        }}>
           <div className="flex items-center gap-3 mb-5 !py-3 !pb-7">
             <Avatar className="h-10 w-10">
               <AvatarFallback style={{ background: "linear-gradient(135deg,#3b82f6,#8b5cf6)" }} className="!text-white !font-bold !text-sm">
@@ -222,32 +232,38 @@ function PayoutModal({ payout, onClose, onConfirm }) {
           {/* Earnings history */}
           <div className="flex items-center gap-2 mb-3">
             <Activity size={13} color="#60a5fa" />
-            <p style={{ margin: 0, fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.65)" }}  className="!py-3">Earnings History</p>
+            <p style={{ margin: 0, fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.65)" }} className="!py-3">Earnings History</p>
           </div>
           <Card style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "10px", overflow: "hidden" }} className="!px-3 !py-3">
-            <Table>
-              <TableHeader>
-                <TableRow style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-                  {["ORDER ID", "DATE", "COMMISSION"].map((h) => (
-                    <TableHead key={h} style={{ color: "rgba(255,255,255,0.28)", fontSize: "10px", fontWeight: 700, letterSpacing: "0.07em" }}>{h}</TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody >
-                {payout.history.map((h) => (
-                  <TableRow key={h.id} style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-                    <TableCell style={{ color: "#60a5fa", fontFamily: "monospace", fontSize: "12px" }}>{h.id}</TableCell>
-                    <TableCell style={{ color: "rgba(255,255,255,0.45)", fontSize: "12px" }}>{h.date}</TableCell>
-                    <TableCell style={{ color: h.commission.startsWith("+") ? "#4ade80" : "#ef4444", fontWeight: 600, fontSize: "12px" }}>{h.commission}</TableCell>
+            <div style={{ overflowX: "auto" }}>
+              <Table>
+                <TableHeader>
+                  <TableRow style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                    {["ORDER ID", "DATE", "COMMISSION"].map((h) => (
+                      <TableHead key={h} style={{ color: "rgba(255,255,255,0.28)", fontSize: "10px", fontWeight: 700, letterSpacing: "0.07em" }}>{h}</TableHead>
+                    ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {payout.history.map((h) => (
+                    <TableRow key={h.id} style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+                      <TableCell style={{ color: "#60a5fa", fontFamily: "monospace", fontSize: "12px" }}>{h.id}</TableCell>
+                      <TableCell style={{ color: "rgba(255,255,255,0.45)", fontSize: "12px" }}>{h.date}</TableCell>
+                      <TableCell style={{ color: h.commission.startsWith("+") ? "#4ade80" : "#ef4444", fontWeight: 600, fontSize: "12px" }}>{h.commission}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </Card>
         </div>
 
         {/* Right panel */}
-        <div style={{ width: "260px", padding: "28px", display: "flex", flexDirection: "column" }}>
+        <div style={{
+          width: isMobile ? "100%" : "260px",
+          padding: isMobile ? "20px" : "28px",
+          display: "flex", flexDirection: "column",
+        }}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <CreditCard size={14} color="#60a5fa" />
@@ -258,11 +274,10 @@ function PayoutModal({ payout, onClose, onConfirm }) {
             </Button>
           </div>
 
-          {/* Bank fields */}
           {[
-            { label: "BANK NAME",        value: payout.bank   },
-            { label: "ACCOUNT HOLDER",   value: payout.holder },
-            { label: "IBAN / ACCOUNT NUMBER", value: payout.iban },
+            { label: "BANK NAME",             value: payout.bank   },
+            { label: "ACCOUNT HOLDER",        value: payout.holder },
+            { label: "IBAN / ACCOUNT NUMBER", value: payout.iban   },
           ].map((f) => (
             <div key={f.label} style={{
               background: "rgba(255,255,255,0.03)",
@@ -274,7 +289,6 @@ function PayoutModal({ payout, onClose, onConfirm }) {
             </div>
           ))}
 
-          {/* Warning */}
           <div style={{
             background: "rgba(245,158,11,0.08)",
             border: "1px solid rgba(245,158,11,0.22)",
@@ -287,7 +301,6 @@ function PayoutModal({ payout, onClose, onConfirm }) {
 
           <div style={{ flex: 1 }} />
 
-          {/* Actions */}
           {confirmed ? (
             <div style={{ textAlign: "center", padding: "20px 0" }}>
               <Check size={28} color="#4ade80" style={{ margin: "0 auto 8px", display: "block" }} />
@@ -305,22 +318,14 @@ function PayoutModal({ payout, onClose, onConfirm }) {
                   display: "flex", alignItems: "center", gap: "6px",
                 }}
               >
-                {loading ? (
-                  <RefreshCw size={14} className="animate-spin" />
-                ) : (
-                  <><Check size={14} /> Confirm Payout</>
-                )}
+                {loading ? <RefreshCw size={14} className="animate-spin" /> : <><Check size={14} /> Confirm Payout</>}
               </Button>
-              <Button
-                onClick={onClose}
-                variant="outline"
-                style={{
-                  background: "transparent",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "rgba(255,255,255,0.5)",
-                  borderRadius: "10px", height: "40px", fontSize: "13px",
-                }}
-              >
+              <Button onClick={onClose} variant="outline" style={{
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "rgba(255,255,255,0.5)",
+                borderRadius: "10px", height: "40px", fontSize: "13px",
+              }}>
                 Cancel
               </Button>
             </div>
@@ -333,42 +338,51 @@ function PayoutModal({ payout, onClose, onConfirm }) {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function FinancePage({ addToast }) {
-  const [payoutFor, setPayoutFor]   = useState(null);
+  const [payoutFor,  setPayoutFor]  = useState(null);
   const [chartRange, setChartRange] = useState("Monthly");
+  const { isMobile, isTablet }      = useBreakpoint();
+  const isNarrow = isMobile || isTablet;
 
   return (
     <div className="flex flex-col w-full">
 
-      {/* ── Top Bar ── */}
-      <header style={{ background: "#0f1117", borderBottom: "1px solid #1e2d3d" }}
-        className="flex items-center justify-between !px-6 !py-4">
+      {/* Top Bar */}
+      <header
+        style={{ background: "#0f1117", borderBottom: "1px solid #1e2d3d" , flexWrap: "wrap", gap: "10px" }}
+        className="flex items-center justify-between !px-4 !py-4"
+       
+      >
         <h1 className="text-white font-bold text-[18px]">Financial Analytics</h1>
         <Button
           variant="outline"
-        className="!px-6 !py-4"
+          className="!px-4 !py-2"
           style={{
             background: "#1e2536", border: "1px solid #33415580",
             borderRadius: "8px", color: "#94a3b8", fontSize: "13px", height: "36px",
           }}
         >
-          <Clock size={13} className="mr-2 " /> This Month
+          <Clock size={13} className="mr-2" /> This Month
         </Button>
       </header>
 
-      <div className="flex flex-col gap-5 !px-6 !py-5">
+      <div className="flex flex-col gap-5" style={{ padding: isMobile ? "12px" : "20px 24px" }}>
 
-        {/* ── Stat Cards ── */}
-        <div className="grid grid-cols-4 gap-4">
+        {/* Stat Cards — 2-col on mobile, 4-col on desktop */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr 1fr" : isTablet ? "1fr 1fr" : "repeat(4, 1fr)",
+          gap: "12px",
+        }}>
           <StatCard label="Total Revenue"     value="$124,592" sub="↗ 12.5% vs last month" color="#60a5fa" glowColor="rgba(59,130,246,0.15)"  icon={DollarSign} />
           <StatCard label="Avg. Order Value"  value="$42.50"   sub="↗ 2.1% vs last month"  color="#a78bfa" glowColor="rgba(167,139,250,0.15)" icon={BarChart3}  />
           <StatCard label="Pending Payouts"   value="$4,200"   sub="8 deliverers awaiting" color="#f59e0b" glowColor="rgba(245,158,11,0.15)"  icon={Clock}      />
           <StatCard label="Commission Earned" value="$12,450"  sub="↗ 5.4% profit margin"  color="#4ade80" glowColor="rgba(74,222,128,0.15)"  icon={TrendingUp} />
         </div>
 
-        {/* ── Revenue Chart ── */}
+        {/* Revenue Chart */}
         <Card style={{ background: "#161f2e", border: "1px solid #1e2d3d", borderRadius: "16px" }}>
-          <CardContent style={{ padding: "24px" }}>
-            <div className="flex items-center justify-between mb-5">
+          <CardContent style={{ padding: isMobile ? "16px" : "24px" }}>
+            <div className="flex items-center justify-between mb-5" style={{ flexWrap: "wrap", gap: "10px" }}>
               <div>
                 <h3 className="text-white font-bold text-[15px] mb-1">Revenue Overview</h3>
                 <p className="text-slate-400 text-[12px]">Monthly revenue analytics & performance</p>
@@ -380,24 +394,19 @@ export default function FinancePage({ addToast }) {
                 borderRadius: "8px", padding: "3px",
               }}>
                 {["Daily", "Monthly"].map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setChartRange(t)}
-                    style={{
-                      borderRadius: "6px", padding: "5px 12px",
-                      fontSize: "11px", fontWeight: 500, cursor: "pointer",
-                      transition: "all 0.15s",
-                      background: chartRange === t ? "rgba(59,130,246,0.2)" : "transparent",
-                      border: chartRange === t ? "1px solid rgba(59,130,246,0.4)" : "1px solid transparent",
-                      color: chartRange === t ? "#93c5fd" : "rgba(255,255,255,0.35)",
-                    }}
-                  >
+                  <button key={t} onClick={() => setChartRange(t)} style={{
+                    borderRadius: "6px", padding: "5px 12px",
+                    fontSize: "11px", fontWeight: 500, cursor: "pointer", transition: "all 0.15s",
+                    background: chartRange === t ? "rgba(59,130,246,0.2)" : "transparent",
+                    border: chartRange === t ? "1px solid rgba(59,130,246,0.4)" : "1px solid transparent",
+                    color: chartRange === t ? "#93c5fd" : "rgba(255,255,255,0.35)",
+                  }}>
                     {t}
                   </button>
                 ))}
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={isMobile ? 160 : 200}>
               <AreaChart data={REVENUE_DATA} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                 <defs>
                   <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
@@ -418,49 +427,59 @@ export default function FinancePage({ addToast }) {
           </CardContent>
         </Card>
 
-        {/* ── Bottom grid ── */}
-        <div className="grid gap-4 " style={{ gridTemplateColumns: "1fr 300px" }}>
+        {/* Bottom grid — stacked on narrow */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isNarrow ? "1fr" : "1fr 300px",
+          gap: "16px",
+        }}>
 
           {/* Recent Transactions */}
           <Card style={{ background: "#161f2e", border: "1px solid #1e2d3d", borderRadius: "16px" }} className="!px-3 !py-3">
             <CardContent style={{ padding: "0" }}>
-              <div className="flex items-center justify-between px-6 pt-5 pb-3">
+              <div className="flex items-center justify-between px-4 pt-5 pb-3">
                 <h3 className="text-white font-bold text-[14px]">Recent Transactions</h3>
                 <button style={{ background: "none", border: "none", color: "#60a5fa", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
                   View All <ChevronRight size={13} />
                 </button>
               </div>
-              <Table >
-                <TableHeader>
-                  <TableRow style={{ borderColor: "#1e2d3d" }}>
-                    {["Order ID", "Date", "Deliverer", "Amount", "Status"].map((h) => (
-                      <TableHead key={h} style={{ color: "#64748b", fontSize: "11px", fontWeight: 600 }} className="uppercase tracking-wider">
-                        {h}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {TRANSACTIONS.map((tx) => (
-                    <TableRow key={tx.id} style={{ borderColor: "#1e2d3d" }} className="hover:!bg-white/5">
-                      <TableCell style={{ color: "#60a5fa", fontFamily: "monospace", fontSize: "12px" }}>{tx.id}</TableCell>
-                      <TableCell style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>{tx.date}</TableCell>
-                      <TableCell className="!px-3 !py-3">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-7 w-7">
-                            <AvatarFallback style={{ background: "linear-gradient(135deg,#3b82f6,#8b5cf6)" }} className="!text-white !text-[10px] !font-bold">
-                              {tx.delivererAvatar}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-white text-[13px]">{tx.deliverer}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="!text-white !font-semibold !text-[13px]">{tx.amount}</TableCell>
-                      <TableCell><StatusBadge status={tx.status} /></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+
+              {/* Horizontally scrollable on mobile */}
+              <div style={{ overflowX: "auto" }}>
+                <div style={{ minWidth: "480px" }}>
+                  <Table>
+                    <TableHeader>
+                      <TableRow style={{ borderColor: "#1e2d3d" }}>
+                        {["Order ID", "Date", "Deliverer", "Amount", "Status"].map((h) => (
+                          <TableHead key={h} style={{ color: "#64748b", fontSize: "11px", fontWeight: 600 }} className="uppercase tracking-wider">
+                            {h}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {TRANSACTIONS.map((tx) => (
+                        <TableRow key={tx.id} style={{ borderColor: "#1e2d3d" }} className="hover:!bg-white/5">
+                          <TableCell style={{ color: "#60a5fa", fontFamily: "monospace", fontSize: "12px" }}>{tx.id}</TableCell>
+                          <TableCell style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>{tx.date}</TableCell>
+                          <TableCell className="!px-3 !py-3">
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-7 w-7">
+                                <AvatarFallback style={{ background: "linear-gradient(135deg,#3b82f6,#8b5cf6)" }} className="!text-white !text-[10px] !font-bold">
+                                  {tx.delivererAvatar}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-white text-[13px]">{tx.deliverer}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="!text-white !font-semibold !text-[13px]">{tx.amount}</TableCell>
+                          <TableCell><StatusBadge status={tx.status} /></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -494,7 +513,7 @@ export default function FinancePage({ addToast }) {
                           background: "#2563eb", color: "white",
                           border: "none", borderRadius: "6px",
                           height: "28px", fontSize: "11px", fontWeight: 600,
-                          padding: "0 12px",
+                          padding: "0 12px", flexShrink: 0,
                         }}
                       >
                         Payout
@@ -502,16 +521,14 @@ export default function FinancePage({ addToast }) {
                     </div>
                   ))}
                 </div>
-                <Button
-                  style={{
-                    width: "100%", marginTop: "12px",
-                    background: "rgba(59,130,246,0.1)",
-                    border: "1px solid rgba(59,130,246,0.3)",
-                    color: "#60a5fa", borderRadius: "8px",
-                    height: "36px", fontSize: "12px", fontWeight: 600,
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-                  }}
-                >
+                <Button style={{
+                  width: "100%", marginTop: "12px",
+                  background: "rgba(59,130,246,0.1)",
+                  border: "1px solid rgba(59,130,246,0.3)",
+                  color: "#60a5fa", borderRadius: "8px",
+                  height: "36px", fontSize: "12px", fontWeight: 600,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                }}>
                   <RefreshCw size={13} /> Process All Payouts
                 </Button>
               </CardContent>
@@ -531,13 +548,11 @@ export default function FinancePage({ addToast }) {
                         </div>
                         <span style={{ fontSize: "12px", fontWeight: 700, color: "white" }}>{g.pct}%</span>
                       </div>
-                      {/* Progress bar */}
                       <div style={{ height: "6px", background: "rgba(255,255,255,0.06)", borderRadius: "999px", overflow: "hidden" }}>
                         <div style={{
                           height: "100%", width: `${g.pct}%`,
                           background: `linear-gradient(90deg, ${g.color}, ${g.color}99)`,
-                          borderRadius: "999px",
-                          transition: "width 0.6s ease",
+                          borderRadius: "999px", transition: "width 0.6s ease",
                         }} />
                       </div>
                     </div>
@@ -545,12 +560,11 @@ export default function FinancePage({ addToast }) {
                 </div>
               </CardContent>
             </Card>
-
           </div>
         </div>
       </div>
 
-      {/* ── Payout Modal ── */}
+      {/* Payout Modal */}
       {payoutFor && (
         <PayoutModal
           payout={payoutFor}

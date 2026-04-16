@@ -428,7 +428,7 @@ nav a::after { display: none; }
   50%       { transform: translate(50px,50px) rotate(180deg); }
 }
 
-.hero h1 { font-size: 48px; position: relative; z-index: 1; }
+.hero h1 { font-size: 48px; font-weight: 700; position: relative; z-index: 1; }
 
 .hero span {
   color: var(--accent);
@@ -452,7 +452,7 @@ nav a::after { display: none; }
 
 /* SECTIONS */
 section { padding: 70px 40px; text-align: center; }
-section h2 { font-size: 32px; margin-bottom: 10px; }
+section h2 { font-size: 32px; font-weight: 700; margin-bottom: 10px; }
 .subtitle { color: var(--text-secondary); margin-bottom: 40px; }
 
 /* CARDS */

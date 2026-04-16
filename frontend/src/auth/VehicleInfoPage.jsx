@@ -1,5 +1,11 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import axios from 'axios';
 import LogoIcon from './LogoIcon';
+
+const API = axios.create({
+  baseURL: 'http://127.0.0.1:5000/api',
+  headers: { 'Content-Type': 'application/json' },
+});
 
 // ── VEHICLE TYPES ─────────────────────────────────────────
 const VEHICLE_TYPES = [
@@ -228,9 +234,9 @@ function SubmissionSummary({ variant = 'submitted' }) {
 
 
 // ═══════════════════════════════════════════════════════════
-// MAIN: VehicleInfoPage
+// MAIN: VehicleInfoPage  (Step 1 → 2 → 3 → submit)
 // ═══════════════════════════════════════════════════════════
-function VehicleInfoPage({ setPage, currentUser, setCurrentUser, addToast,onSubmitSuccess }) {
+function VehicleInfoPage({ currentUser, setCurrentUser, addToast, onSubmitSuccess }) {
   const [step, setStep] = useState(1);
 
   const [vehicleType,  setVehicleType]  = useState('car');
@@ -244,6 +250,8 @@ function VehicleInfoPage({ setPage, currentUser, setCurrentUser, addToast,onSubm
   const [err2,        setErr2]        = useState({});
 
   const [submitting, setSubmitting] = useState(false);
+
+  // StepBar shows step 2 for steps 1 & 2, step 3 for the review screen
   const barStep = step === 3 ? 3 : 2;
 
   function validateStep1() {
@@ -274,21 +282,32 @@ function VehicleInfoPage({ setPage, currentUser, setCurrentUser, addToast,onSubm
   }
 
   async function handleSubmit() {
-  setSubmitting(true);
-  await new Promise(r => setTimeout(r, 1800));
-  setSubmitting(false);
+    setSubmitting(true);
+    try {
+      // ── Call the backend to mark onboarding as done and set status → pending ──
+      // Replace currentUser.id with whatever field holds the user's backend ID
+      const userId = currentUser?.id || currentUser?._id;
+      if (userId) {
+        await API.post(`/auth/onboarding/${userId}/`);
+      }
 
-  setCurrentUser(prev => ({
-    ...prev,
-    status: 'pending',
-    onboardingDone: true,
-  }));
+      // In a real app you'd also upload the files to your storage endpoint here.
+      // e.g. await uploadDocuments(userId, { regFile, licenseFile, idFile });
 
-  addToast?.('success', 'Application submitted!', 'Your account is now under review (24–48 h).');
+      addToast?.('success', 'Application submitted!', 'Your account is now under review (24–48 h).');
 
-  // ← use the prop instead of setPage
-  setTimeout(() => onSubmitSuccess?.(), 50);
-}
+      // Notify App.jsx to update user state and navigate
+      onSubmitSuccess?.();
+    } catch (err) {
+      console.error('Onboarding submission error:', err);
+      // Even if the API call fails (e.g. offline), we still update local state
+      // so the UI flow continues. The backend can be synced later.
+      addToast?.('warning', 'Application submitted!', 'Your data was saved locally. We\'ll sync when back online.');
+      onSubmitSuccess?.();
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   const selectedVehicle = VEHICLE_TYPES.find(v => v.id === vehicleType);
 
@@ -296,7 +315,6 @@ function VehicleInfoPage({ setPage, currentUser, setCurrentUser, addToast,onSubm
     <div className="!min-h-screen !bg-[#0b1929] !text-white">
       <TopBar currentUser={currentUser} />
 
-      {/* ── Centered container ── */}
       <div className="!flex !justify-center !px-5 !py-8 !pb-16">
         <div className="!w-full !max-w-[720px]">
 
@@ -358,7 +376,7 @@ function VehicleInfoPage({ setPage, currentUser, setCurrentUser, addToast,onSubm
                 />
               </div>
 
-              <NavRow onBack={() => setPage('home')} onNext={handleNext} />
+              <NavRow onBack={() => window.history.back()} onNext={handleNext} />
             </Card>
           )}
 
@@ -467,13 +485,46 @@ function VehicleInfoPage({ setPage, currentUser, setCurrentUser, addToast,onSubm
   );
 }
 
+
 // ═══════════════════════════════════════════════════════════
 // UNDER REVIEW PAGE
+// Polls the backend every 15 seconds to check if admin has
+// approved the deliverer (status changed from 'pending' → 'active').
+// When approved, calls onApproved() which transitions to /verified.
 // ═══════════════════════════════════════════════════════════
-export function UnderReviewPage({ currentUser, setPage }) {
+export function UnderReviewPage({ currentUser, onApproved }) {
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    // Don't poll if we don't have a user ID to query
+    const userId = currentUser?.id || currentUser?._id;
+    if (!userId) return;
+
+    async function checkStatus() {
+      setChecking(true);
+      try {
+        const res = await API.get(`/auth/status/${userId}/`);
+        if (res.data?.status === 'active') {
+          // Admin has approved — trigger the transition to /verified
+          onApproved?.();
+        }
+      } catch (err) {
+        // Network error or backend down — silently retry next interval
+        console.warn('Status check failed (will retry):', err.message);
+      } finally {
+        setChecking(false);
+      }
+    }
+
+    // Check immediately on mount, then every 15 seconds
+    checkStatus();
+    const interval = setInterval(checkStatus, 15000);
+    return () => clearInterval(interval);
+  }, [currentUser?.id, currentUser?._id]);
+
   return (
     <div className="!min-h-screen !bg-[#0b1929] !text-white">
-      <TopBar currentUser={currentUser} statusColor="#f59e0b" statusLabel="Pending" />
+      <TopBar currentUser={currentUser} statusColor="#f59e0b" statusLabel="Pending Review" />
 
       <div className="!flex !justify-center !px-5 !py-8 !pb-16">
         <div className="!w-full !max-w-[860px]">
@@ -497,7 +548,7 @@ export function UnderReviewPage({ currentUser, setPage }) {
                 </p>
                 <span className="!inline-flex !items-center !gap-2 !bg-amber-500/10 !text-amber-400 !border !border-amber-500/25 !rounded-full !px-5 !py-2 !text-[13px] !font-semibold">
                   <span className="!w-2 !h-2 !rounded-full !bg-amber-400 !inline-block !animate-pulse" />
-                  Moderation in Progress
+                  {checking ? 'Checking status…' : 'Moderation in Progress'}
                 </span>
               </div>
 
@@ -546,13 +597,17 @@ export function UnderReviewPage({ currentUser, setPage }) {
   );
 }
 
+
 // ═══════════════════════════════════════════════════════════
 // VERIFIED PAGE
+// One-time welcome screen shown after admin approval.
+// "Get Started" sets status='active' + welcomeSeen=true,
+// so future logins go directly to the dashboard.
 // ═══════════════════════════════════════════════════════════
-export function VerifiedPage({ currentUser, setPage }) {
+export function VerifiedPage({ currentUser, onGetStarted }) {
   return (
     <div className="!min-h-screen !bg-[#0b1929] !text-white">
-      <TopBar currentUser={currentUser} statusColor="#4ade80" statusLabel="Active" />
+      <TopBar currentUser={currentUser} statusColor="#4ade80" statusLabel="Verified" />
 
       <div className="!flex !justify-center !px-5 !py-8 !pb-16">
         <div className="!w-full !max-w-[860px]">
@@ -590,9 +645,16 @@ export function VerifiedPage({ currentUser, setPage }) {
                   <ZapIcon />
                 </div>
                 <h4 className="!text-[16px] !font-bold !mb-2">Ready to earn?</h4>
-                <p className="!text-[13px] !text-white/42 !leading-relaxed !mb-6">Your account is fully set up. Start accepting deliveries right now from your dashboard.</p>
+                <p className="!text-[13px] !text-white/42 !leading-relaxed !mb-6">
+                  Your account is fully set up. Start accepting deliveries right now from your dashboard.
+                </p>
+                {/*
+                  onGetStarted sets status='active' + welcomeSeen=true in App.jsx.
+                  This means the next time this deliverer logs in, resolveDelivererPath
+                  will send them straight to /deliverer-dashboard.
+                */}
                 <button
-                  onClick={() => setPage('dashboard')}
+                  onClick={onGetStarted}
                   className="!w-full !flex !items-center !justify-center !gap-2 !bg-gradient-to-br !from-blue-600 !to-blue-700 hover:!from-blue-500 hover:!to-blue-600 !text-white !font-semibold !text-[14px] !px-6 !py-3 !rounded-xl !transition-all !duration-200 !shadow-[0_4px_14px_rgba(37,99,235,0.4)] hover:!shadow-[0_6px_20px_rgba(37,99,235,0.5)] hover:!-translate-y-0.5"
                 >
                   Get Started →

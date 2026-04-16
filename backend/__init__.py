@@ -2,45 +2,53 @@ from flask import Flask
 from enum import StrEnum
 from pymongo import MongoClient
 from flask_cors import CORS
+import firebase_admin
+from firebase_admin import credentials, auth as firebase_auth
 
-# Create a local mongodb database server
-wassali_db = MongoClient("mongodb://127.0.0.1:27017")
-db = wassali_db["wassali_db"]
+# Initialize once at app startup
+cred = credentials.Certificate("serviceAccountKey.json")
+firebase_admin.initialize_app(cred)
+
+
+
+# MongoDB Configuration
+MONGODB_URI = "mongodb://127.0.0.1:27017"
+DATABASE_NAME = "wassali_db"
+
+# Database and Collections
+client = MongoClient(MONGODB_URI)
+db = client[DATABASE_NAME]
 users_collection = db["users"]
 deliveries_collection = db["deliveries"]
+verification_codes = db["verification_codes"]
 
-
-# usernames and emails must be unique to prevent duplicate
+# Database Indexes for performance and uniqueness constraints
 users_collection.create_index("username", unique=True)
 users_collection.create_index("email", unique=True)
-
-
-# add indexes for deliveries collection for better performance
 deliveries_collection.create_index("client_id")
 deliveries_collection.create_index("deliverer_id")
 deliveries_collection.create_index("status")
+verification_codes.create_index("expires_at" , expireAfterSeconds=0)
 
+
+
+# Flask Application
 app = Flask(__name__)
-
-# enable CORS in flask server to run in the frontend
 CORS(app)
 
 
-# define 3 types of users check rayan's wassali.pdf file
 class Role(StrEnum):
     ADMIN = "admin"
     CLIENT = "client"
     DELIVERER = "deliverer"
 
 
-# define 3 types of users check rayan's wassali.pdf file pending / active / suspended
 class Status(StrEnum):
     PENDING = "pending"
     ACTIVE = "active"
     SUSPENDED = "suspended"
 
 
-# define 5 types for the delivery status
 class DeliveryStatus(StrEnum):
     PENDING = "pending"
     ACCEPTED = "accepted"

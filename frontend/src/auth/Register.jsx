@@ -47,10 +47,17 @@ function RegisterPage({ addToast }) {
     if (Object.keys(validationErrors).length > 0) { setErrors(validationErrors); return; }
     setLoading(true);
 
+    // ✅ Pass the actual role selected by the user (client or deliverer)
     register({ name, email, password, role })
       .then(() => {
         setLoading(false);
-        addToast('success', 'Account created!', 'You can now log in with your credentials.');
+        addToast(
+          'success',
+          'Account created!',
+          role === 'deliverer'
+            ? 'Log in to complete your deliverer registration.'
+            : 'You can now log in.'
+        );
         navigate('/login');
       })
       .catch((err) => {
@@ -70,9 +77,8 @@ function RegisterPage({ addToast }) {
         <h2 className="auth-title">Create your account</h2>
         <p className="auth-subtitle">Join Wassali and start delivering smarter.</p>
 
-        {/*Role Card */}
-
-          <div className="role-selector">
+        {/* Role Selector */}
+        <div className="role-selector">
 
           {/* Client card */}
           <div
@@ -104,6 +110,14 @@ function RegisterPage({ addToast }) {
           </div>
 
         </div>
+
+        {/* Deliverer hint */}
+        {role === 'deliverer' && (
+          <div className="auth-hint-box" style={{ marginBottom: 12 }}>
+            <span>After registering, log in to complete your vehicle info & documents.</span>
+          </div>
+        )}
+
         {errors.general && <div className="auth-error-banner">{errors.general}</div>}
 
         <div className="auth-form-group">
