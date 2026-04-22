@@ -1,16 +1,13 @@
 
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "../../lib/utils";
 import {
   LayoutDashboard,
@@ -20,6 +17,7 @@ import {
   CreditCard,
   FileText,
   MessageSquare,
+  User,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -33,10 +31,11 @@ const navItems = [
   { label: "Finances",      icon: CreditCard,      id: "finances",      path: "/dashboard/finances"      },
   { label: "Reports",       icon: FileText,        id: "reports",       path: "/dashboard/reports"       },
   { label: "Messages",      icon: MessageSquare,   id: "messages",      path: "/dashboard/messages"      },
+  { label: "Profile",       icon: User,            id: "profile",       path: "/dashboard/profile"       },
   { label: "Settings",      icon: Settings,        id: "settings",      path: "/dashboard/settings"      },
 ];
  
-export default function SideBar({ currentUser, onLogout }) {
+export default function SideBar({ onLogout }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
  
@@ -66,7 +65,7 @@ export default function SideBar({ currentUser, onLogout }) {
       </SidebarHeader>
  
       {/* ── Nav items ── */}
-      <SidebarContent className="!px-4">
+      <SidebarContent className="!px-4 !flex !flex-col !flex-1">
         <SidebarMenu className="!gap-0.5">
           {navItems.map(({ label, icon: Icon, id, path }) => {
             const isActive = activeItem?.id === id;
@@ -95,41 +94,22 @@ export default function SideBar({ currentUser, onLogout }) {
           })}
         </SidebarMenu>
  
-        {/* ── Divider + Logout ── */}
-        <SidebarSeparator className="!my-2 !bg-[#1e2d3d]" />
- 
+      </SidebarContent>
+
+      <div className="!px-4 !pb-4 !pt-2 !mt-auto">
+        <SidebarSeparator className="!mb-2 !bg-[#1e2d3d]" />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={onLogout}
-              className="!flex !w-full !items-center !gap-2.5 rounded-[10px] !px-3 !py-2.5 !text-[13.5px] !font-medium !text-slate-400 !transition-all !duration-150 hover:bg-[#1e2536] hover:text-slate-100"
+              className="!flex !w-full !items-center !gap-2.5 !rounded-[10px] !px-3 !py-2.5 !text-[13.5px] !font-medium !text-slate-400 !transition-all !duration-150 hover:!bg-[#1e2536] hover:!text-slate-100"
             >
-              <LogOut size={16} className="shrink-0 opacity-70" />
+              <LogOut size={16} className="!shrink-0 !opacity-70" />
               Logout
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-      </SidebarContent>
- 
-      {/* ── User footer ── */}
-      <SidebarFooter className="!px-3 !pb-4 !pt-2">
-        <div className="!flex !cursor-pointer !items-center !gap-2.5 !rounded-[10px] !px-3 !py-2.5 transition-colors hover:bg-[#1e2536]">
-          <Avatar className="!h-8 w-8 !shrink-0">
-            <AvatarImage src={currentUser?.avatar || "/avatars/admin.png"} alt={currentUser?.name} />
-            <AvatarFallback className="!bg-gradient-to-br !from-blue-500 !to-violet-600 !text-xs !font-bold !text-white">
-              {currentUser?.name?.charAt(0).toUpperCase() || "A"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="!flex !flex-col !overflow-hidden !leading-tight">
-            <span className="!truncate !text-[13px] !font-semibold !text-slate-100">
-              {currentUser?.name || "Admin User"}
-            </span>
-            <span className="!truncate !text-[11px] !text-slate-500">
-              {currentUser?.email || "admin@wassali.com"}
-            </span>
-          </div>
-        </div>
-      </SidebarFooter>
+      </div>
  
     </div>
   );

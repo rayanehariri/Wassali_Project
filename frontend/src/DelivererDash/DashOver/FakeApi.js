@@ -1,6 +1,4 @@
-// FakeDelivererApi.js
-
-const delay = (ms = 400) => new Promise(res => setTimeout(res, ms));
+import { http } from "../../api/http";
 
 const fakeDelivererStats = {
   totalEarnings: { value: "2,845.50 DZD", change: "+12.5%", positive: true,  label: "vs last week"     },
@@ -26,8 +24,8 @@ const fakeRecentDeliveries = [
  * Replace with: return axios.get("/api/deliverer/stats")
  */
 export async function getDelivererStats() {
-  await delay();
-  return fakeDelivererStats;
+  const res = await http.get("/deliverer/stats");
+  return res?.data?.data ?? fakeDelivererStats;
 }
 
 /**
@@ -35,8 +33,8 @@ export async function getDelivererStats() {
  * Replace with: return axios.get("/api/deliverer/notifications")
  */
 export async function getDelivererNotifications() {
-  await delay();
-  return fakeNotifications;
+  const res = await http.get("/deliverer/notifications");
+  return res?.data?.data?.notifications ?? fakeNotifications;
 }
 
 /**
@@ -44,8 +42,8 @@ export async function getDelivererNotifications() {
  * Replace with: return axios.get("/api/deliverer/deliveries/recent")
  */
 export async function getRecentDeliveries() {
-  await delay();
-  return fakeRecentDeliveries;
+  const res = await http.get("/deliverer/deliveries/recent");
+  return res?.data?.data?.deliveries ?? fakeRecentDeliveries;
 }
 
 /**
@@ -53,6 +51,6 @@ export async function getRecentDeliveries() {
  * Replace with: return axios.post("/api/deliverer/status", { online })
  */
 export async function toggleOnlineStatus(online) {
-  await delay(300);
-  return { success: true, online };
+  const res = await http.post("/deliverer/status", { online });
+  return res?.data?.data ?? { success: true, online };
 }

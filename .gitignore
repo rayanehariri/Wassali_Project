@@ -1,5 +1,6 @@
 __pycache__/
 backend/serviceAccountKey.json
+backend/uploads/
 
 # Frontend
 frontend/node_modules/

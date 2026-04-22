@@ -1,6 +1,6 @@
 // Forgot.jsx
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import AuthLayout from './AuthLayout';
 import { forgotPassword } from './FakeUsers';
 
@@ -17,10 +17,25 @@ function ForgotPage({ addToast }) {
     setLoading(true);
 
     forgotPassword(email)
-      .then(() => {
+      .then((out) => {
         setLoading(false);
-        addToast('info', 'Recovery email sent!', 'We sent a reset link to ' + email);
-        navigate('/check-email');
+        if (out.devResetLink) {
+          addToast(
+            'info',
+            'Reset link (development)',
+            'Email is not configured on the server. Open this link on this device: ' + out.devResetLink,
+          );
+        } else {
+          addToast('info', 'Recovery email sent!', 'We sent a reset link to ' + email);
+        }
+        if (out.devNotice) addToast('info', 'Email setup', out.devNotice);
+        navigate('/check-email', {
+          state: {
+            email,
+            devResetLink: out.devResetLink,
+            devNotice: out.devNotice,
+          },
+        });
       })
       .catch((err) => {
         setLoading(false);
@@ -75,21 +90,42 @@ function ForgotPage({ addToast }) {
 
 function CheckEmailPage({ addToast }) {
   const navigate = useNavigate();
+  const { state } = useLocation();
+  const email = state?.email || '';
+
   const [resent, setResent]   = useState(false);
   const [loading, setLoading] = useState(false);
+  const [devResetLink, setDevResetLink] = useState(state?.devResetLink || '');
+  const [devNotice, setDevNotice] = useState(state?.devNotice || '');
 
-  function handleResend() {
+  useEffect(() => {
+    setDevResetLink(state?.devResetLink || '');
+    setDevNotice(state?.devNotice || '');
+  }, [state?.devResetLink, state?.devNotice]);
+
+  async function handleResend() {
+    if (!email) {
+      addToast('error', 'Missing email', 'Go back to forgot password and enter your email.');
+      return;
+    }
     setLoading(true);
-
-    // Re-use forgotPassword with a placeholder — in real backend
-    // this would be a dedicated /api/auth/resend-verification endpoint:
-    // return axios.post("/api/auth/resend-verification")
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const out = await forgotPassword(email);
+      if (out.devResetLink) {
+        setDevResetLink(out.devResetLink);
+        setDevNotice(out.devNotice || '');
+        addToast('info', 'New reset link (dev)', out.devResetLink);
+      } else {
+        addToast('success', 'Email resent!', 'Check your inbox again.');
+      }
+      if (out.devNotice) addToast('info', 'Note', out.devNotice);
       setResent(true);
-      addToast('success', 'Email resent!', 'Check your inbox again.');
       setTimeout(() => setResent(false), 5000);
-    }, 1000);
+    } catch (e) {
+      addToast('error', 'Resend failed', e.message || 'Try again.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -104,7 +140,34 @@ function CheckEmailPage({ addToast }) {
         </div>
 
         <h2 className="auth-title">Check your email</h2>
-        <p className="auth-subtitle">We sent a password reset link to your email.</p>
+        <p className="auth-subtitle">
+          We sent a password reset link{email ? ` to ${email}` : ' to your email'}.
+        </p>
+
+        {(devResetLink || devNotice) && (
+          <div
+            style={{
+              margin: '16px 0',
+              padding: '12px 14px',
+              borderRadius: 12,
+              background: 'rgba(59, 130, 246, 0.12)',
+              border: '1px solid rgba(59, 130, 246, 0.4)',
+              textAlign: 'left',
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            {devNotice && <p style={{ margin: '0 0 10px' }}>{devNotice}</p>}
+            {devResetLink && (
+              <p style={{ margin: 0, wordBreak: 'break-all' }}>
+                <strong>Open reset link:</strong>{' '}
+                <a href={devResetLink} style={{ color: '#93c5fd' }}>
+                  {devResetLink}
+                </a>
+              </p>
+            )}
+          </div>
+        )}
 
         <p className="auth-switch" style={{ marginBottom: 20 }}>
           Didn't receive the email?{' '}

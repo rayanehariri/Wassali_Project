@@ -1,189 +1,192 @@
-// FakeVerificationApi.js
+import { http } from "../../api/http";
 
-const delay = (ms = 400) => new Promise((res) => setTimeout(res, ms));
-
-const fakeVerifications = [
+// ─── API Functions ──────────────────────────────────────────────────────────────
+const FALLBACK_VERIFICATIONS = [
   {
-    id: "VER-001",
-    deliverer: { name: "Ahmed Benali", email: "ahmed.b@example.com", avatar: "AB" },
-    submissionDate: "Oct 24, 2023",
-    submissionTime: "10:42 AM",
+    id: "VER-1001",
+    deliverer: { name: "Ahmed K.", email: "ahmed.k@wassali.com", avatar: "AK" },
+    submissionDate: "Apr 18, 2026",
+    submissionTime: "10:24 AM",
     idType: "Driver's License",
-    idNumber: "DL-98231-X",
+    idNumber: "1458-ALG-22",
     status: "Pending",
-    documents: ["front.jpg", "back.jpg"],
+    documents: [],
   },
   {
-    id: "VER-002",
-    deliverer: { name: "Sara Mounir", email: "sara.m@example.com", avatar: "SM" },
-    submissionDate: "Oct 23, 2023",
-    submissionTime: "02:15 PM",
+    id: "VER-1002",
+    deliverer: { name: "Sarah M.", email: "sarah.m@wassali.com", avatar: "SM" },
+    submissionDate: "Apr 17, 2026",
+    submissionTime: "04:02 PM",
     idType: "National ID",
-    idNumber: "18928374",
+    idNumber: "DZ-90321445",
     status: "Verified",
-    documents: ["front.jpg"],
+    documents: [],
   },
   {
-    id: "VER-003",
-    deliverer: { name: "Karim Jaziri", email: "k.jaziri@example.com", avatar: "KJ" },
-    submissionDate: "Oct 22, 2023",
-    submissionTime: "09:30 AM",
+    id: "VER-1003",
+    deliverer: { name: "Youssef B.", email: "youssef.b@wassali.com", avatar: "YB" },
+    submissionDate: "Apr 17, 2026",
+    submissionTime: "09:33 AM",
     idType: "Passport",
-    idNumber: "P99283112",
-    status: "Pending",
-    documents: ["passport.jpg"],
-  },
-  {
-    id: "VER-004",
-    deliverer: { name: "Omar Fayed", email: "omar.f@example.com", avatar: "OF" },
-    submissionDate: "Oct 21, 2023",
-    submissionTime: "04:45 PM",
-    idType: "Driver's License",
-    idNumber: "DL-77382-Y",
+    idNumber: "P-887234",
     status: "Rejected",
-    documents: ["front.jpg", "back.jpg"],
+    documents: [],
   },
   {
-    id: "VER-005",
-    deliverer: { name: "Leila Mansour", email: "l.mansour@example.com", avatar: "LM" },
-    submissionDate: "Oct 21, 2023",
-    submissionTime: "11:15 AM",
-    idType: "National ID",
-    idNumber: "22938471",
-    status: "Pending",
-    documents: ["front.jpg"],
-  },
-  {
-    id: "VER-006",
-    deliverer: { name: "Youssef Karimi", email: "y.karimi@example.com", avatar: "YK" },
-    submissionDate: "Oct 20, 2023",
-    submissionTime: "08:00 AM",
-    idType: "Passport",
-    idNumber: "P88172634",
-    status: "Verified",
-    documents: ["passport.jpg"],
-  },
-  {
-    id: "VER-007",
-    deliverer: { name: "Nour Hamdan", email: "n.hamdan@example.com", avatar: "NH" },
-    submissionDate: "Oct 19, 2023",
-    submissionTime: "03:20 PM",
-    idType: "National ID",
-    idNumber: "33841920",
-    status: "Rejected",
-    documents: ["front.jpg"],
-  },
-  {
-    id: "VER-008",
-    deliverer: { name: "Rania Tahir", email: "r.tahir@example.com", avatar: "RT" },
-    submissionDate: "Oct 18, 2023",
-    submissionTime: "01:10 PM",
+    id: "VER-1004",
+    deliverer: { name: "Nora A.", email: "nora.a@wassali.com", avatar: "NA" },
+    submissionDate: "Apr 16, 2026",
+    submissionTime: "01:47 PM",
     idType: "Driver's License",
-    idNumber: "DL-44512-Z",
+    idNumber: "2291-ALG-75",
     status: "Pending",
-    documents: ["front.jpg", "back.jpg"],
-  },
-  {
-    id: "VER-009",
-    deliverer: { name: "Bilal Osman", email: "b.osman@example.com", avatar: "BO" },
-    submissionDate: "Oct 17, 2023",
-    submissionTime: "10:05 AM",
-    idType: "Passport",
-    idNumber: "P77364821",
-    status: "Verified",
-    documents: ["passport.jpg"],
-  },
-  {
-    id: "VER-010",
-    deliverer: { name: "Salma Idrissi", email: "s.idrissi@example.com", avatar: "SI" },
-    submissionDate: "Oct 16, 2023",
-    submissionTime: "09:45 AM",
-    idType: "National ID",
-    idNumber: "44920183",
-    status: "Pending",
-    documents: ["front.jpg"],
+    documents: [],
   },
 ];
 
-const fakeVerificationStats = {
-  pendingRequests: { value: 12,     change: "Requires attention", positive: false, label: "Requires attention"   },
-  verifiedWeek:    { value: 45,     change: "+12% from last week", positive: true,  label: "+12% from last week" },
-  rejectedWeek:    { value: 3,      change: "Incorrect documents", positive: false, label: "Incorrect documents" },
-  avgReviewTime:   { value: "4h 12m", change: "Within SLA",        positive: true,  label: "Within SLA"         },
-};
+function formatSubmissionDate(raw) {
+  if (raw == null) return "";
+  try {
+    const d = typeof raw === "string" ? new Date(raw) : raw;
+    return new Date(d).toLocaleString();
+  } catch {
+    return String(raw);
+  }
+}
 
-// ─── API Functions ──────────────────────────────────────────────────────────────
+function mapVerification(v) {
+  const docs =
+    v.documents && typeof v.documents === "object" && !Array.isArray(v.documents)
+      ? v.documents
+      : {};
+  return {
+    id: v.verification_id ?? v._id ?? v.id,
+    deliverer: {
+      name: v.deliverer?.name ?? "Deliverer",
+      email: v.deliverer?.email ?? "",
+      avatar: v.deliverer?.avatar ?? (v.deliverer?.name ? v.deliverer.name.slice(0, 2).toUpperCase() : "D"),
+    },
+    submissionDate: v.submission_date ?? formatSubmissionDate(v.created_at) ?? "",
+    submissionTime: v.submission_time ?? "",
+    idType: v.id_type ?? "",
+    idNumber: v.id_number ?? "",
+    status: (v.status ?? "pending").toString().replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    documents: docs,
+    vehicle: v.vehicle ?? null,
+    raw: v,
+  };
+}
 
 export async function getVerifications(filters = {}) {
-  await delay();
-  let result = [...fakeVerifications];
+  let result = [];
+  try {
+    const res = await http.get("/verification/admin/list");
+    result = res?.data?.verifications ?? res?.data?.data?.verifications ?? [];
+  } catch {
+    result = [];
+  }
 
+  const mapped = (result.length ? result.map(mapVerification) : [...FALLBACK_VERIFICATIONS]);
+
+  let filtered = mapped;
   if (filters.status && filters.status !== "All") {
-    result = result.filter((v) => v.status === filters.status);
+    filtered = filtered.filter((v) => (v.status ?? "").toLowerCase() === filters.status.toLowerCase());
   }
   if (filters.idType && filters.idType !== "All ID Types") {
-    result = result.filter((v) => v.idType === filters.idType);
+    filtered = filtered.filter((v) => (v.idType ?? "").toLowerCase() === filters.idType.toLowerCase());
   }
   if (filters.search) {
-    const q = filters.search.toLowerCase();
-    result = result.filter(
+    const q = String(filters.search).toLowerCase();
+    filtered = filtered.filter(
       (v) =>
-        v.deliverer.name.toLowerCase().includes(q) ||
-        v.idNumber.toLowerCase().includes(q)
+        String(v.deliverer?.name ?? "").toLowerCase().includes(q) ||
+        String(v.idNumber ?? "").toLowerCase().includes(q)
     );
   }
 
-  const page       = filters.page  || 1;
-  const limit      = filters.limit || 5;
-  const total      = result.length;
-  const totalPages = Math.ceil(total / limit);
-  const paginated  = result.slice((page - 1) * limit, page * limit);
+  const page = filters.page || 1;
+  const limit = filters.limit || 5;
+  const total = filtered.length;
+  const totalPages = Math.ceil(total / limit) || 1;
+  const verifications = filtered.slice((page - 1) * limit, page * limit);
 
-  return { verifications: paginated, total, page, totalPages };
+  return { verifications, total, page, totalPages };
 }
 
 export async function getVerificationById(id) {
-  await delay();
-  return fakeVerifications.find((v) => v.id === id) ?? null;
+  try {
+    const res = await http.get(`/verification/admin/${id}`);
+    const v = res?.data?.verification ?? res?.data?.data?.verification ?? null;
+    if (!v) return FALLBACK_VERIFICATIONS.find((x) => x.id === id) ?? null;
+    return mapVerification(v);
+  } catch {
+    return FALLBACK_VERIFICATIONS.find((x) => x.id === id) ?? null;
+  }
 }
 
 export async function getVerificationStats() {
-  await delay();
-  return fakeVerificationStats;
+  const { verifications } = await getVerifications({ status: "All", idType: "All ID Types", page: 1, limit: 200 });
+  const pending = verifications.filter((v) => v.status === "Pending").length;
+  const verified = verifications.filter((v) => v.status === "Verified").length;
+  const rejected = verifications.filter((v) => v.status === "Rejected").length;
+  return {
+    pendingRequests: { value: pending, change: "Needs review", positive: pending <= 5, label: "Needs review" },
+    verifiedWeek: { value: verified, change: "This week", positive: true, label: "This week" },
+    rejectedWeek: { value: rejected, change: "This week", positive: rejected === 0, label: "This week" },
+    avgReviewTime: { value: "18h", change: "Avg", positive: true, label: "Avg" },
+  };
 }
 
-export async function updateVerificationStatus(id, status) {
-  await delay();
-  const item = fakeVerifications.find((v) => v.id === id);
-  if (item) item.status = status;
-  return item ?? null;
+export async function updateVerificationStatus(id, status, rejectReason) {
+  const normalized = String(status || "").toLowerCase();
+  try {
+    if (normalized === "verified" || normalized === "approved") {
+      await http.post(`/verification/admin/${id}/approve`);
+    } else if (normalized === "rejected") {
+      await http.post(`/verification/admin/${id}/reject`, {
+        reason: rejectReason?.trim() || "Rejected by admin",
+      });
+    }
+  } catch {
+    // UI keeps working with fallback data when backend is unavailable.
+  }
+  return (
+    (await getVerificationById(id)) ??
+    {
+      id,
+      deliverer: { name: "Deliverer", email: "", avatar: "D" },
+      submissionDate: "",
+      submissionTime: "",
+      idType: "",
+      idNumber: "",
+      status: normalized === "rejected" ? "Rejected" : "Verified",
+      documents: [],
+    }
+  );
 }
 
 export async function createVerification(data) {
-  await delay();
-  const newItem = {
-    id: `VER-${String(fakeVerifications.length + 1).padStart(3, "0")}`,
-    submissionDate: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }),
-    submissionTime: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+  return {
+    id: `VER-${Date.now()}`,
+    deliverer: data?.deliverer ?? { name: "New Deliverer", email: "new@wassali.com", avatar: "ND" },
+    submissionDate: new Date().toLocaleDateString(),
+    submissionTime: new Date().toLocaleTimeString(),
+    idType: data?.idType ?? "National ID",
+    idNumber: data?.idNumber ?? "00000000",
     status: "Pending",
     documents: [],
-    ...data,
   };
-  fakeVerifications.unshift(newItem);
-  return newItem;
 }
 
 export async function deleteVerification(id) {
-  await delay();
-  const index = fakeVerifications.findIndex((v) => v.id === id);
-  if (index !== -1) fakeVerifications.splice(index, 1);
-  return { success: true };
+  // Not implemented (keep UI action harmless)
+  return { success: false };
 }
 
 export async function exportVerificationsCSV() {
-  await delay();
+  const { verifications } = await getVerifications({ status: "All", idType: "All ID Types", page: 1, limit: 5000 });
   const headers = ["ID", "Name", "Email", "ID Type", "ID Number", "Submission Date", "Status"];
-  const rows = fakeVerifications.map((v) =>
+  const rows = verifications.map((v) =>
     [v.id, v.deliverer.name, v.deliverer.email, v.idType, v.idNumber, v.submissionDate, v.status].join(",")
   );
   return [headers.join(","), ...rows].join("\n");

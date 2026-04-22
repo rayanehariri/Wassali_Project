@@ -6,7 +6,7 @@
 // Change only API_BASE_URL in api.config.js to switch environments.
  
 /*import { API_BASE_URL, getAuthHeaders } from "./api.config";*/
- 
+
 const delay = (ms = 350) => new Promise(r => setTimeout(r, ms));
  
 // ─── Fake data ────────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ export async function getEarningsStats() {
   await delay();
   return { ...FAKE_STATS };
   /* [FAKE] */
- 
+
   /* [REAL]
   const res = await fetch(`${API_BASE_URL}/admin/earnings/stats`, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error("Failed to fetch earnings stats");
@@ -89,7 +89,7 @@ export async function getBalance() {
   await delay();
   return { ...FAKE_BALANCE };
   /* [FAKE] */
- 
+
   /* [REAL]
   const res = await fetch(`${API_BASE_URL}/admin/earnings/balance`, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error("Failed to fetch balance");

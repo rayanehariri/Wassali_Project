@@ -1,5 +1,4 @@
 // DelivererTopBar.jsx
-import { useState } from "react";
 import { Bell, Settings, Menu } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
@@ -17,8 +16,7 @@ const notifications = [
   { id: 4, color: "#a78bfa", label: "Surge Pricing Active",  sub: "2× multiplier in your zone.",   time: "5hrs ago"  },
 ];
 
-export default function DelivererTopBar({ currentUser, onLogout, isMobile, onMenuClick }) {
- const [isOnline, setIsOnline] = useState(true);
+export default function DelivererTopBar({ currentUser, onLogout, isMobile, onMenuClick, isOnline, onToggleOnline }) {
  const navigate = useNavigate();
 
   return (
@@ -55,12 +53,19 @@ export default function DelivererTopBar({ currentUser, onLogout, isMobile, onMen
       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
 
         {/* Online status pill */}
-        <div style={{
+        <button
+          type="button"
+          onClick={() => onToggleOnline?.(!isOnline)}
+          style={{
           padding: "6px 10px", gap: "5px",
           background: "transparent", border: "1px solid #1e2d3d",
-          borderRadius: "10px", color: "#64748b",
+          borderRadius: "10px", color: isOnline ? "#10b981" : "#64748b",
           display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
+          cursor: "pointer",
+        }}
+          onMouseEnter={e => { e.currentTarget.style.background = "#1e2d3d"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+        >
           <div style={{
             width: "8px", height: "8px", borderRadius: "50%",
             background: isOnline ? "#10b981" : "#64748b",
@@ -74,7 +79,7 @@ export default function DelivererTopBar({ currentUser, onLogout, isMobile, onMen
           }}>
             {isOnline ? "Online" : "Offline"}
           </span>
-        </div>
+        </button>
 
         {/* Bell */}
         <Popover>

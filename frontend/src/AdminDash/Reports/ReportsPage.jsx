@@ -538,8 +538,8 @@ export default function ReportsPage() {
         .reports-admin-layout {
           display: grid;
           grid-template-columns: 320px 1fr 256px;
-          min-height: calc(100vh - 57px);
-          height: calc(100vh - 57px);
+          min-height: 100vh;
+          height: 100vh;
           overflow: hidden;
           font-family: 'DM Sans', system-ui, sans-serif;
           background: #07101f;

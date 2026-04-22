@@ -3,16 +3,11 @@
 // Everything else is IDENTICAL — register, forgotPassword, changeUsername, etc.
 
 // FakeAuthApi.js
-import axios from "axios";
+import { http } from "../api/http";
 import { signInWithCustomToken, signOut } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../Firebase.config";
 import { normalizeRole } from "./roles";
- 
-const API = axios.create({
-  baseURL: "http://127.0.0.1:5000/api",
-  headers: { "Content-Type": "application/json" },
-});
  
 // ─── Offline / fallback admin ──────────────────────────────────────────────
 // This account works in two situations:
@@ -85,26 +80,12 @@ export async function login(email, password) {
  
   // ── Try real backend first ─────────────────────────────
   try {
-    const res = await API.post("/auth/login/", {
+    const res = await http.post("/auth/login/", {
       username: email,
       password,
     });
  
     if (!res.data.success) {
-      // Backend is online but login failed.
-      // If the error is "user does not exist" and the credentials match
-      // the fallback admin, let them in anyway (admin not seeded in DB yet).
-      const msg = (res.data.message ?? "").toLowerCase();
-      const isUserNotFound =
-        msg.includes("does not exist") ||
-        msg.includes("not found") ||
-        msg.includes("no account");
- 
-      if (isUserNotFound && isFallbackAdmin(email, password)) {
-        console.warn("⚠️ Admin not in DB — using fallback admin account.");
-        return buildFallbackAdminResult();
-      }
- 
       throw new Error(res.data.message || "Login failed.");
     }
  
@@ -127,9 +108,15 @@ export async function login(email, password) {
  
     user = await signIntoFirebase(user, res.data.firebaseToken);
  
+    // Save JWT tokens for API calls
+    try {
+      if (res.data.access_token) localStorage.setItem("access_token", res.data.access_token);
+      if (res.data.refresh_token) localStorage.setItem("refresh_token", res.data.refresh_token);
+    } catch {}
+
     return {
       user,
-      token: res.data._id,
+      token: res.data.access_token, // kept for App.jsx signature; now it's a real bearer token
     };
  
   } catch (err) {
@@ -151,28 +138,6 @@ export async function login(email, password) {
       );
     }
  
-    // ── Backend is online but returned a 4xx/5xx error ─────────────────────
-    // Check if the error message indicates "user not found" — if so and the
-    // credentials match the fallback admin, allow login anyway (admin not seeded).
-    const serverMsg = (
-      err.response?.data?.message ||
-      err.response?.data?.detail  ||
-      err.message ||
-      ""
-    ).toLowerCase();
- 
-    const isUserNotFoundError =
-      serverMsg.includes("does not exist") ||
-      serverMsg.includes("not found")      ||
-      serverMsg.includes("no account")     ||
-      serverMsg.includes("invalid")        ||
-      err.response?.status === 404;
- 
-    if (isUserNotFoundError && isFallbackAdmin(email, password)) {
-      console.warn("⚠️ Admin not in DB (HTTP error path) — using fallback admin account.");
-      return buildFallbackAdminResult();
-    }
- 
     throw new Error(
       err.response?.data?.message ||
       err.response?.data?.detail  ||
@@ -185,7 +150,7 @@ export async function login(email, password) {
 // ─── register ──────────────────────────────────────────────────────────────
 export async function register({ name, email, phone, password, role }) {
   try {
-    const res = await API.post("/auth/register/", {
+    const res = await http.post("/auth/register/", {
       username: name,
       email,
       phone,
@@ -208,18 +173,74 @@ export async function register({ name, email, phone, password, role }) {
  
 // ─── forgotPassword ────────────────────────────────────────────────────────
 export async function forgotPassword(email) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (!email) reject(new Error("No account found with this email address."));
-      else resolve({ success: true, message: "Reset link sent to " + email });
-    }, 1000);
+  const res = await http.post("/auth/forgot-password/", { email });
+  const body = res?.data ?? {};
+  if (body.success === false) throw new Error(body.message || "Request failed.");
+  return {
+    success: true,
+    message: body.message || "If an account exists, a reset link was sent.",
+    devResetLink: body.dev_reset_link,
+    devNotice: body.dev_notice,
+    userFound: body.user_found,
+  };
+}
+
+// ─── register (phone verify flow) ───────────────────────────────────────────
+export async function registerStart({ name, email, phone, password, role }) {
+  const res = await http.post("/auth/register/start/", {
+    username: name,
+    email,
+    phone,
+    password,
+    role: role || "client",
   });
+  const body = res?.data ?? {};
+  if (body.success === false) throw new Error(body.message || "Could not start registration.");
+  return {
+    pendingId: body.pending_id,
+    expiresIn: body.expires_in_seconds ?? 900,
+    devVerificationCode: body.dev_verification_code,
+    devNotice: body.dev_notice,
+  };
+}
+
+export async function registerEmailStart({ name, email, password, role }) {
+  const res = await http.post("/auth/register/email/start/", {
+    username: name,
+    email,
+    password,
+    role: role || "client",
+  });
+  const body = res?.data ?? {};
+  if (body.success === false) throw new Error(body.message || "Could not start registration.");
+  return {
+    pendingId: body.pending_id,
+    expiresIn: body.expires_in_seconds ?? 900,
+    devVerificationCode: body.dev_verification_code,
+    devNotice: body.dev_notice,
+  };
+}
+
+export async function registerVerify(pendingId, code) {
+  const res = await http.post("/auth/register/verify/", { pending_id: pendingId, code });
+  const body = res?.data ?? {};
+  if (body.success === false) throw new Error(body.message || "Verification failed.");
+}
+
+export async function registerResendCode(pendingId) {
+  const res = await http.post("/auth/register/resend-code/", { pending_id: pendingId });
+  const body = res?.data ?? {};
+  if (body.success === false) throw new Error(body.message || "Resend failed.");
+  return {
+    devVerificationCode: body.dev_verification_code,
+    devNotice: body.dev_notice,
+  };
 }
  
 // ─── changeUsername ────────────────────────────────────────────────────────
 export async function changeUsername(oldUsername, newUsername) {
   try {
-    const res = await API.post(`/auth/change/username/${oldUsername}/`, {
+    const res = await http.post(`/auth/change/username/${oldUsername}/`, {
       new_username: newUsername,
     });
     if (!res.data.success) throw new Error(res.data.message);
@@ -232,7 +253,15 @@ export async function changeUsername(oldUsername, newUsername) {
 // ─── changePassword ────────────────────────────────────────────────────────
 export async function changePassword(username, oldPassword, newPassword) {
   try {
-    const res = await API.post(`/auth/change/password/${username}/`, {
+    let targetUsername = username;
+    if (!targetUsername) {
+      const me = await http.get("/auth/me/");
+      const user = me?.data?.user ?? me?.data?.data?.user;
+      targetUsername = user?.username;
+    }
+    if (!targetUsername) throw new Error("Unable to resolve account username.");
+
+    const res = await http.post(`/auth/change/password/${targetUsername}/`, {
       old_password: oldPassword,
       new_password: newPassword,
     });
@@ -246,6 +275,16 @@ export async function changePassword(username, oldPassword, newPassword) {
 // ─── logout ────────────────────────────────────────────────────────────────
 export async function logout() {
   try {
+    // Revoke refresh token on backend (best-effort)
+    try {
+      const rt = localStorage.getItem("refresh_token");
+      if (rt) await http.post("/auth/logout/", { refresh_token: rt });
+    } catch {}
+    try {
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+    } catch {}
+
     if (auth.currentUser?.uid) {
       await setDoc(doc(db, "users", auth.currentUser.uid), {
         status:   "offline",

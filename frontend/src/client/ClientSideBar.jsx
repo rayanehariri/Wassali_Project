@@ -2,19 +2,18 @@
 import { useNavigate } from "react-router-dom";
 import {
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import {
   Package,
   MapPin,
   Wallet,
+  User,
   Settings,
   Headphones,
   LogOut,
@@ -27,11 +26,11 @@ const navItems = [
   { key: "home", label: "My Orders", icon: Package },
   { key: "track", label: "Track Delivery", icon: MapPin },
   { key: "wallet", label: "Wallet", icon: Wallet },
+  { key: "profile", label: "Profile", icon: User },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
 export default function ClientSideBar({
-  currentUser,
   onLogout,
   active,
   inDeliveryFlow,
@@ -125,6 +124,31 @@ export default function ClientSideBar({
         </SidebarMenu>
 
         <div className="!px-0 !pt-3 !pb-1">
+          <SidebarMenu className="!gap-0.5">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => handleNav("support")}
+                className={cn(
+                  "!group !flex !w-full !items-center !gap-2.5 !rounded-[10px] !px-3 !py-2.5 !text-[13.5px] !font-medium !transition-all !duration-150",
+                  !inDeliveryFlow && active === "support"
+                    ? "!bg-[#2563eb] !text-white hover:!bg-blue-700 !shadow-[0_4px_6px_-4px_rgba(19,127,236,0.5),0_10px_15px_-3px_rgba(19,127,236,0.3)]"
+                    : "!text-slate-400 hover:!bg-[#1e2536] hover:!text-slate-100"
+                )}
+              >
+                <Headphones
+                  size={16}
+                  className={cn(
+                    "!shrink-0 !transition-opacity",
+                    !inDeliveryFlow && active === "support" ? "!opacity-100" : "!opacity-70 group-hover:!opacity-90"
+                  )}
+                />
+                Support
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </div>
+
+        <div className="!px-0 !pt-1 !pb-1">
           <button
             type="button"
             onClick={() => {
@@ -142,34 +166,9 @@ export default function ClientSideBar({
             New Delivery
           </button>
         </div>
-
-        <SidebarSeparator className="!my-2 !bg-[#1e2d3d]" />
-
-        <SidebarMenu className="!gap-0.5">
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={() => handleNav("support")}
-              className={cn(
-                "!group !flex !w-full !items-center !gap-2.5 !rounded-[10px] !px-3 !py-2.5 !text-[13.5px] !font-medium !transition-all !duration-150",
-                !inDeliveryFlow && active === "support"
-                  ? "!bg-[#2563eb] !text-white hover:!bg-blue-700 !shadow-[0_4px_6px_-4px_rgba(19,127,236,0.5),0_10px_15px_-3px_rgba(19,127,236,0.3)]"
-                  : "!text-slate-400 hover:!bg-[#1e2536] hover:!text-slate-100"
-              )}
-            >
-              <Headphones
-                size={16}
-                className={cn(
-                  "!shrink-0 !transition-opacity",
-                  !inDeliveryFlow && active === "support" ? "!opacity-100" : "!opacity-70 group-hover:!opacity-90"
-                )}
-              />
-              Support
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-
-        <SidebarSeparator className="!my-2 !bg-[#1e2d3d]" />
-
+      </SidebarContent>
+      <div className="!px-4 !pb-4 !pt-2 !mt-auto">
+        <SidebarSeparator className="!mb-2 !bg-[#1e2d3d]" />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -185,30 +184,7 @@ export default function ClientSideBar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-      </SidebarContent>
-
-      <SidebarFooter className="!px-3 !pb-4 !pt-2">
-        <button
-          type="button"
-          onClick={() => handleNav("settings")}
-          className="!flex !w-full !cursor-pointer !items-center !gap-2.5 !rounded-[10px] !border-none !bg-transparent !px-3 !py-2.5 text-left transition-colors hover:!bg-[#1e2536]"
-        >
-          <Avatar className="!h-8 w-8 !shrink-0">
-            <AvatarImage src={currentUser?.avatar} alt={currentUser?.name} />
-            <AvatarFallback className="!bg-gradient-to-br !from-blue-500 !to-violet-600 !text-xs !font-bold !text-white">
-              {currentUser?.name?.charAt(0).toUpperCase() || "C"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="!flex !min-w-0 !flex-col !overflow-hidden !leading-tight">
-            <span className="!truncate !text-[13px] !font-semibold !text-slate-100">
-              {currentUser?.name || "Client"}
-            </span>
-            <span className="!truncate !text-[11px] !text-slate-500">
-              {currentUser?.email || "Account"}
-            </span>
-          </div>
-        </button>
-      </SidebarFooter>
+      </div>
     </div>
   );
 }

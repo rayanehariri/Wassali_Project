@@ -144,7 +144,7 @@ class User:
                 "success": False,
                 "message": "You are not authorized to view this data.",
             }
-        users_list = list(users_collection.find())
+        users_list = list(users_collection.find({}, {"password": 0}).sort("role", 1))
         for user in users_list:
             user["_id"] = str(user["_id"])
         return {"success": True, "users": users_list}

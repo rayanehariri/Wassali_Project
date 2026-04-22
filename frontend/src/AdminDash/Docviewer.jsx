@@ -1,4 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { http } from '../api/http';
+import { getVerificationById, updateVerificationStatus } from './Verfication/FakeApi';
  
 // ── ICONS ─────────────────────────────────────────────────────────────────────
 const XIcon       = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
@@ -36,6 +39,72 @@ function timeAgo(dateStr) {
 function fmtDate(dateStr) {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+/** Map API / FakeApi verification row to the shape expected by DocViewerModal (item.docs.*). */
+export function mapApiVerificationToViewerItem(v) {
+  if (!v) return null;
+  const raw = v.documents || {};
+  const fileName = (key) => {
+    const node = raw[key];
+    if (!node) return '';
+    return typeof node === 'string' ? node : (node.name || '');
+  };
+  const lic = fileName('license');
+  const idc = fileName('idCard');
+  const reg = fileName('registration');
+  const ok = (s) => Boolean(s && String(s).toLowerCase() !== 'missing');
+  const submitted = v.submissionDate || '';
+  const st = String(v.status || 'pending').toLowerCase();
+  const badgeStatus = st === 'verified' ? 'approved' : st === 'rejected' ? 'rejected' : 'pending';
+  const vid = v.id;
+
+  return {
+    id: vid,
+    avatar: v.deliverer?.avatar || '?',
+    name: v.deliverer?.name || 'Deliverer',
+    email: v.deliverer?.email || '',
+    status: badgeStatus,
+    submittedAt: submitted,
+    idType: v.idType || '—',
+    vehicle: v.vehicle,
+    docs: {
+      license: {
+        front: '',
+        back: '',
+        fileLabel: lic,
+        extracted: {
+          fullName: v.deliverer?.name,
+          docType: "Driver's License",
+          idNumber: v.idNumber,
+          dob: '',
+          expiry: '',
+          valid: ok(lic),
+          matchScore: ok(lic) ? 78 : 38,
+        },
+      },
+      idCard: {
+        front: '',
+        fileLabel: idc,
+        extracted: {
+          fullName: v.deliverer?.name,
+          docType: 'National ID',
+          idNumber: v.idNumber,
+          matchScore: ok(idc) ? 74 : 36,
+          valid: ok(idc),
+        },
+      },
+      regDoc: {
+        front: '',
+        fileLabel: reg,
+        extracted: {
+          docType: 'Vehicle registration',
+          matchScore: ok(reg) ? 81 : 36,
+          valid: ok(reg),
+        },
+      },
+    },
+  };
 }
  
 // ── STATUS BADGE ──────────────────────────────────────────────────────────────
@@ -76,9 +145,8 @@ function ScoreRing({ score }) {
 }
  
 // ── DOC VIEWER MODAL ─────────────────────────────────────────────────────────
-export default function DocViewerModal({ item, onClose, onApprove, onReject }) {
+export function DocViewerModal({ item, onClose, onApprove, onReject }) {
   const [activeDoc,  setActiveDoc]  = useState('license');
-  const [side,       setSide]       = useState('front');
   const [reason,     setReason]     = useState('');
   const [comments,   setComments]   = useState('');
   const [confirming, setConfirming] = useState(null); // null | 'approve' | 'reject'
@@ -94,25 +162,32 @@ export default function DocViewerModal({ item, onClose, onApprove, onReject }) {
       document.body.style.overflow = '';
       window.removeEventListener('keydown', handleKey);
     };
-  }, []);
+  }, [onClose]);
  
   // Active tab data
   const activeTab     = DOC_TABS.find(t => t.key === activeDoc);
   const activeDocData = item.docs?.[activeDoc] ?? {};
   const extracted     = activeDocData.extracted ?? {};
   const score         = extracted.matchScore ?? 0;
-  const currentImg    = activeDocData[side] || activeDocData.front || '';
+  const currentImg    = activeDocData.front || '';
+  const fileLabel     = activeDocData.fileLabel || '';
+  const isPdfPreview =
+    Boolean(currentImg) &&
+    (/\.pdf$/i.test(fileLabel) || activeDocData.mime === 'application/pdf');
  
-  function switchDoc(key) { setActiveDoc(key); setSide('front'); setImgKey(k => k + 1); }
-  function switchSide(s)  { setSide(s); setImgKey(k => k + 1); }
+  function switchDoc(key) { setActiveDoc(key); setImgKey(k => k + 1); }
  
   async function handleDecision(decision) {
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1200));
-    setLoading(false);
-    if (decision === 'approve') onApprove(item.id);
-    else                        onReject(item.id, reason);
-    onClose();
+    try {
+      if (decision === 'approve') await Promise.resolve(onApprove(item.id));
+      else await Promise.resolve(onReject(item.id, reason));
+      onClose();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   }
  
   return (
@@ -155,7 +230,7 @@ export default function DocViewerModal({ item, onClose, onApprove, onReject }) {
               <div>
                 <div className="!flex !items-center !gap-2.5 !mb-1">
                   <h3 className="!m-0 !text-[15px] !font-bold !tracking-tight">
-                    Verification #{8000 + item.id}
+                    Verification #{String(item.id).replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase() || '—'}
                   </h3>
                   <StatusBadge status={item.status} />
                 </div>
@@ -203,33 +278,49 @@ export default function DocViewerModal({ item, onClose, onApprove, onReject }) {
                 <span className="!text-[12px] !font-semibold !text-white/60" style={{ color: activeTab?.color }}>
                   {activeTab?.label}
                 </span>
-                <span className="!text-[11px] !text-white/25">
-                  — {side === 'front' ? 'Front Side' : 'Back Side'}
-                </span>
               </div>
  
               {/* Image area */}
               <div className="!flex-1 !flex !items-center !justify-center !p-4 !relative !overflow-hidden" style={{ minHeight: 200 }}>
                 {currentImg ? (
-                  <img
-                    key={imgKey}
-                    src={currentImg}
-                    alt="Document"
-                    className="!max-w-full !rounded-xl !object-contain"
-                    style={{
-                      maxHeight: 240,
-                      border: '1px solid rgba(255,255,255,.09)',
-                      boxShadow: '0 8px 32px rgba(0,0,0,.4)',
-                      animation: 'dvImgSlide .22s ease both',
-                    }}
-                  />
+                  isPdfPreview ? (
+                    <object
+                      key={imgKey}
+                      data={currentImg}
+                      type="application/pdf"
+                      className="!w-full !rounded-xl"
+                      style={{
+                        height: 240,
+                        border: '1px solid rgba(255,255,255,.09)',
+                        boxShadow: '0 8px 32px rgba(0,0,0,.4)',
+                        animation: 'dvImgSlide .22s ease both',
+                      }}
+                      aria-label="Document PDF"
+                    />
+                  ) : (
+                    <img
+                      key={imgKey}
+                      src={currentImg}
+                      alt="Document"
+                      className="!max-w-full !rounded-xl !object-contain"
+                      style={{
+                        maxHeight: 240,
+                        border: '1px solid rgba(255,255,255,.09)',
+                        boxShadow: '0 8px 32px rgba(0,0,0,.4)',
+                        animation: 'dvImgSlide .22s ease both',
+                      }}
+                    />
+                  )
                 ) : (
-                  <div className="!flex !flex-col !items-center !gap-3 !text-white/20">
+                  <div className="!flex !flex-col !items-center !gap-2 !text-white/20 !text-center !px-2">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2">
                       <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
-                    <span className="!text-[13px]">No image available</span>
+                    <span className="!text-[13px]">No preview available</span>
+                    {fileLabel && fileLabel !== 'missing' && (
+                      <span className="!text-[12px] !text-white/45 !break-all">Submitted filename: {fileLabel}</span>
+                    )}
                   </div>
                 )}
  
@@ -241,24 +332,6 @@ export default function DocViewerModal({ item, onClose, onApprove, onReject }) {
                   <span className="!w-1.5 !h-1.5 !rounded-full" style={{ background: activeTab?.color }} />
                   {activeTab?.label}
                 </div>
-              </div>
- 
-              {/* Front / Back toggle */}
-              <div className="!flex !gap-2 !px-4 !pb-3 !border-t !border-white/[.06] !pt-3 !flex-shrink-0">
-                {['front', 'back'].map(s => (
-                  <button
-                    key={s}
-                    onClick={() => switchSide(s)}
-                    className="!flex-1 !py-2.5 !rounded-xl !text-[12px] !font-medium !transition-all !duration-150 !border"
-                    style={{
-                      background: side === s ? 'rgba(59,130,246,.18)' : 'transparent',
-                      borderColor: side === s ? 'rgba(59,130,246,.45)' : 'rgba(255,255,255,.08)',
-                      color: side === s ? '#93c5fd' : 'rgba(255,255,255,.35)',
-                    }}
-                  >
-                    {s === 'front' ? '⬜ Front Side' : '⬛ Back Side'}
-                  </button>
-                ))}
               </div>
  
               {/* Progress dots */}
@@ -508,5 +581,163 @@ export default function DocViewerModal({ item, onClose, onApprove, onReject }) {
         </div>
       </div>
     </>
+  );
+}
+
+/** Merge mapped `documents` with raw API `documents` so `path` is never dropped. */
+function mergeVerificationDocs(row) {
+  if (!row) return {};
+  const a = row.documents || {};
+  const b = (row.raw && row.raw.documents) || {};
+  const keys = ['license', 'idCard', 'registration'];
+  const out = {};
+  for (const k of keys) {
+    const na = a[k] && typeof a[k] === 'object' ? a[k] : {};
+    const nb = b[k] && typeof b[k] === 'object' ? b[k] : {};
+    out[k] = { ...nb, ...na };
+  }
+  return out;
+}
+
+/** Route: /dashboard/verification/:id — full-screen document review (original UI). */
+export default function DocViewerPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [apiRow, setApiRow] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [blobUrls, setBlobUrls] = useState({ license: '', idCard: '', regDoc: '' });
+  const [blobMimes, setBlobMimes] = useState({ license: '', idCard: '', regDoc: '' });
+  const mergedDocs = useMemo(() => mergeVerificationDocs(apiRow), [apiRow]);
+  const pathSig = useMemo(() => {
+    if (!apiRow?.id) return '';
+    const d = mergedDocs;
+    return `${apiRow.id}:${[d.license?.path, d.idCard?.path, d.registration?.path].join('|')}`;
+  }, [apiRow?.id, mergedDocs]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const row = await getVerificationById(id);
+        if (alive) setApiRow(row);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [id]);
+
+  useEffect(() => {
+    if (!pathSig) {
+      setBlobUrls({ license: '', idCard: '', regDoc: '' });
+      setBlobMimes({ license: '', idCard: '', regDoc: '' });
+      return undefined;
+    }
+    const vid = apiRow.id;
+    const docs = mergedDocs;
+    const pairs = [
+      ['license', 'license'],
+      ['idCard', 'idCard'],
+      ['regDoc', 'registration'],
+    ];
+    const created = [];
+    let cancelled = false;
+
+    (async () => {
+      const nextUrls = { license: '', idCard: '', regDoc: '' };
+      const nextMimes = { license: '', idCard: '', regDoc: '' };
+      for (const [uiKey, apiKey] of pairs) {
+        if (cancelled) return;
+        if (!docs[apiKey]?.path) continue;
+        try {
+          const res = await http.get(`/verification/admin/${vid}/document/${apiKey}`, { responseType: 'blob' });
+          const blob = res.data;
+          const hdrCt = (res.headers['content-type'] || '').toLowerCase();
+          if (hdrCt.includes('application/json') || (blob.type && String(blob.type).includes('json'))) {
+            const txt = await blob.text();
+            let msg = 'Document request failed';
+            try {
+              msg = JSON.parse(txt).message || msg;
+            } catch (_) {}
+            console.warn('verification document fetch failed', apiKey, msg);
+            continue;
+          }
+          const mime = (blob && blob.type) || res.headers['content-type'] || '';
+          const url = URL.createObjectURL(blob);
+          if (cancelled) {
+            URL.revokeObjectURL(url);
+            return;
+          }
+          created.push(url);
+          nextUrls[uiKey] = url;
+          nextMimes[uiKey] = mime;
+        } catch (e) {
+          console.warn('verification document fetch failed', uiKey, e);
+        }
+      }
+      if (!cancelled) {
+        setBlobUrls(nextUrls);
+        setBlobMimes(nextMimes);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      created.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [apiRow, pathSig, mergedDocs]);
+
+  const item = useMemo(() => {
+    const base = mapApiVerificationToViewerItem(apiRow);
+    if (!base) return null;
+    return {
+      ...base,
+      docs: {
+        license: {
+          ...base.docs.license,
+          front: blobUrls.license || base.docs.license.front,
+          mime: blobMimes.license || base.docs.license.mime,
+        },
+        idCard: {
+          ...base.docs.idCard,
+          front: blobUrls.idCard || base.docs.idCard.front,
+          mime: blobMimes.idCard || base.docs.idCard.mime,
+        },
+        regDoc: {
+          ...base.docs.regDoc,
+          front: blobUrls.regDoc || base.docs.regDoc.front,
+          mime: blobMimes.regDoc || base.docs.regDoc.mime,
+        },
+      },
+    };
+  }, [apiRow, blobUrls, blobMimes]);
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#080d18', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+        Loading…
+      </div>
+    );
+  }
+
+  if (!item) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#080d18', padding: 24, color: 'white' }}>
+        <button type="button" onClick={() => navigate('/dashboard/verification')} style={{ background: 'transparent', border: 'none', color: '#93c5fd', cursor: 'pointer', marginBottom: 12 }}>
+          ← Back
+        </button>
+        <p>Verification not found.</p>
+      </div>
+    );
+  }
+
+  return (
+    <DocViewerModal
+      item={item}
+      onClose={() => navigate('/dashboard/verification')}
+      onApprove={(vid) => updateVerificationStatus(vid, 'Verified')}
+      onReject={(vid, reason) => updateVerificationStatus(vid, 'Rejected', reason)}
+    />
   );
 }

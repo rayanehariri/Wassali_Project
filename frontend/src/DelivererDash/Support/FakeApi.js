@@ -2,9 +2,7 @@
 // Change API_BASE_URL in api.config.js to switch to real backend.
 // Each function: [FAKE] runs now, [REAL] uncomment when backend ready.
 
-/*import { API_BASE_URL, getAuthHeaders } from "./api.config";*/
-
-const delay = (ms = 350) => new Promise(r => setTimeout(r, ms));
+import { http } from "../../api/http";
 
 // ─── Fake data ────────────────────────────────────────────────────────────────
 
@@ -53,83 +51,32 @@ const FAKE_SAFETY_REPORT_CATEGORIES = [
 
 // ─── 1. getSystemStatus ───────────────────────────────────────────────────────
 export async function getSystemStatus() {
-  /* [FAKE] */
-  await delay(300);
-  return { ...FAKE_SYSTEM_STATUS };
-  /* [FAKE] */
-
-  /* [REAL]
-  const res = await fetch(`${API_BASE_URL}/support/system-status`, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error("Failed to fetch system status");
-  return res.json();
-  // expected: { orderDispatch: { label, status, uptime, note }, payoutAPI: {...}, network: {...} }
-  [REAL] */
+  const res = await http.get("/deliverer/support/system-status");
+  return res?.data?.data ?? { ...FAKE_SYSTEM_STATUS };
 }
 
 // ─── 2. getTickets ────────────────────────────────────────────────────────────
 export async function getTickets({ page = 1, limit = 5 } = {}) {
-  /* [FAKE] */
-  await delay(400);
-  const total      = FAKE_TICKETS.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  const tickets    = FAKE_TICKETS.slice((page - 1) * limit, page * limit);
-  return { tickets, total, totalPages, page };
-  /* [FAKE] */
-
-  /* [REAL]
-  const params = new URLSearchParams({ page, limit });
-  const res = await fetch(`${API_BASE_URL}/support/tickets?${params}`, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error("Failed to fetch tickets");
-  return res.json();
-  // expected: { tickets: [...], total, totalPages, page }
-  [REAL] */
+  const res = await http.get("/deliverer/support/tickets", { params: { page, limit } });
+  return res?.data?.data ?? { tickets: [], total: 0, totalPages: 1, page };
 }
 
 // ─── 3. getFAQs ───────────────────────────────────────────────────────────────
 export async function getFAQs() {
-  /* [FAKE] */
-  await delay(300);
-  return [...FAKE_FAQS];
-  /* [FAKE] */
-
-  /* [REAL]
-  const res = await fetch(`${API_BASE_URL}/support/faqs`, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error("Failed to fetch FAQs");
-  return res.json();
-  [REAL] */
+  const res = await http.get("/deliverer/support/faqs");
+  return res?.data?.data?.faqs ?? [...FAKE_FAQS];
 }
 
 // ─── 4. submitSafetyReport ───────────────────────────────────────────────────
 export async function submitSafetyReport({ category, email, description }) {
-  /* [FAKE] */
-  await delay(800);
-  if (!description?.trim()) throw new Error("Description is required");
-  return { success: true, reportId: `RPT-${Date.now()}` };
-  /* [FAKE] */
-
-  /* [REAL]
-  const res = await fetch(`${API_BASE_URL}/support/safety-report`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ category, email, description }),
-  });
-  if (!res.ok) throw new Error("Failed to submit report");
-  return res.json();
-  [REAL] */
+  const res = await http.post("/deliverer/support/safety-report", { category, email, description });
+  return res?.data?.data ?? { success: true };
 }
 
 // ─── 5. getSafetyCategories ──────────────────────────────────────────────────
 export async function getSafetyCategories() {
-  /* [FAKE] */
-  await delay(200);
-  return [...FAKE_SAFETY_REPORT_CATEGORIES];
-  /* [FAKE] */
-
-  /* [REAL]
-  const res = await fetch(`${API_BASE_URL}/support/safety-categories`, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error("Failed to fetch categories");
-  return res.json();
-  [REAL] */
+  const res = await http.get("/deliverer/support/safety-categories");
+  return res?.data?.data?.categories ?? [...FAKE_SAFETY_REPORT_CATEGORIES];
 }
 
 // ─── Exported constants (used by static pages) ────────────────────────────────

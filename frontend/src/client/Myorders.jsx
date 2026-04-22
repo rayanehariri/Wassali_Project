@@ -1,7 +1,9 @@
 // ═══════════════════════════════════════════════════════════
 // PageHome.jsx — My Orders
 // ═══════════════════════════════════════════════════════════
-import { ORDERS, Badge, CatIcon, TopBar, CityBanner } from './Shared';
+import { useEffect, useMemo, useState } from 'react';
+import { Badge, CatIcon, TopBar, CityBanner } from './Shared';
+import { http } from '../api/http';
 
 const ALGIERS_IMG = null;
 
@@ -11,14 +13,108 @@ const CAT_COLORS = {
   PACKAGES:  { icon:'rgba(167,139,250,1)', bg:'rgba(167,139,250,0.12)',border:'rgba(167,139,250,0.2)' },
 };
 
-export default function PageHome({ currentUser, setActive, addToast, onNewDelivery, onSettings }) {
-  const active    = ORDERS.find(o => o.status === 'in_transit');
-  const recent    = ORDERS.filter(o => o.status !== 'in_transit').slice(0, 3);
+export default function PageHome({ currentUser, setActive, addToast, onNewDelivery, onSettings, isOnline, onToggleOnline }) {
+  const [liveActive, setLiveActive] = useState(null);
+  const [recentLive, setRecentLive] = useState([]);
+  const active = liveActive;
+  const recent = recentLive;
   const firstName = currentUser?.name?.split(' ')[0] || 'Alex';
+
+  const clientId = useMemo(
+    () => currentUser?._id ?? currentUser?.id ?? currentUser?.client_id ?? null,
+    [currentUser],
+  );
+
+  useEffect(() => {
+    let alive = true;
+    async function loadActive() {
+      try {
+        const res = await http.get('/client/deliveries/active');
+        const d = res?.data?.delivery ?? res?.data?.data?.delivery ?? null;
+        if (!alive || !d) {
+          if (alive) setLiveActive(null);
+          return;
+        }
+        const isDelivered = String(d.status || '').toLowerCase() === 'delivered';
+        setLiveActive({
+          id: `#${String(d._id || '').slice(0, 8)}`,
+          status: isDelivered ? 'completed' : 'in_transit',
+          cat: 'PACKAGES',
+          title: d.description_of_order || 'Delivery',
+          sub: `${d.pickup_address || 'Pickup'} -> ${d.dropoff_address || 'Dropoff'}`,
+          amount: `${Number(d.price || 0).toLocaleString()} DZD`,
+          date: 'Now',
+          courier: d.deliverer_name || 'Deliverer',
+          av: (d.deliverer_name || 'DL').split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase(),
+          eta: isDelivered ? 'Delivered' : 'Live',
+          pct: isDelivered ? 100 : 72,
+          from: d.pickup_address || 'Pickup',
+          to: d.dropoff_address || 'Dropoff',
+        });
+      } catch {
+        if (alive) setLiveActive(null);
+      }
+    }
+    loadActive();
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadRecent() {
+      if (!clientId) return;
+      try {
+        const res = await http.get(`/client/deliveries/${clientId}`);
+        const deliveries = res?.data?.deliveries ?? res?.data?.data?.deliveries ?? [];
+        const mapped = (deliveries || [])
+          .filter((d) => String(d.status || '').toLowerCase() !== 'accepted')
+          .slice(0, 3)
+          .map((d) => {
+            const statusRaw = String(d.status || '').toLowerCase();
+            const status =
+              statusRaw === 'delivered' ? 'completed' :
+              statusRaw === 'cancelled' ? 'cancelled' :
+              statusRaw === 'rejected' ? 'cancelled' :
+              'completed';
+            const courier = d.deliverer_name || '—';
+            return {
+              id: `#${String(d._id || '').slice(0, 8)}`,
+              status,
+              cat: 'PACKAGES',
+              title: d.description_of_order || 'Delivery',
+              sub: `${d.pickup_address || 'Pickup'} -> ${d.dropoff_address || 'Dropoff'}`,
+              amount: `${Number(d.price || 0).toLocaleString()} DZD`,
+              date: d.created_at ? String(d.created_at).slice(0, 10) : '—',
+              courier,
+              av: courier === '—' ? '—' : courier.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase(),
+              eta: null,
+              pct: status === 'completed' ? 100 : 0,
+              from: d.pickup_address || 'Pickup',
+              to: d.dropoff_address || 'Dropoff',
+            };
+          });
+        if (!alive) return;
+        setRecentLive(mapped);
+      } catch {
+        if (alive) setRecentLive([]);
+      }
+    }
+    loadRecent();
+    const t = setInterval(loadRecent, 3000);
+    return () => { alive = false; clearInterval(t); };
+  }, [clientId]);
 
   return (
     <div style={{ animation:'cdFadeUp .3s ease both' }}>
-      <TopBar onSettings={onSettings} setActive={setActive} addToast={addToast} currentUser={currentUser} />
+      <TopBar
+        onSettings={onSettings}
+        setActive={setActive}
+        addToast={addToast}
+        currentUser={currentUser}
+        showOnline
+        isOnline={isOnline}
+        onToggleOnline={onToggleOnline}
+      />
       <div className="cd-page-wrap">
         <div className="cd-home-top-row">
           <div>

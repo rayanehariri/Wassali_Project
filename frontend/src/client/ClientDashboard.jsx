@@ -10,6 +10,7 @@ import PageTrack from "./Pagetrack";
 import PageWallet from "./Pagewallet";
 import PageSettings from "./Pagesettings";
 import PageSupport from "./Pagesupport";
+import PageProfile from "./Pageprofile";
 import NewDeliveryPage from "./NewDeliveryPage";
 import ChooseDelivererPage from "./ChooseDelivererPage";
 import CheckoutPage from "./CheckoutPage";
@@ -20,6 +21,8 @@ import ClientSideBar from "./ClientSideBar";
 
 import { WassaliLogo } from "./Shared";
 
+const FLOW_STORAGE_KEY = "client_delivery_flow";
+
 export default function ClientDashboard({ currentUser, onLogout, addToast }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [active, setActive] = useState("home");
@@ -27,6 +30,7 @@ export default function ClientDashboard({ currentUser, onLogout, addToast }) {
   const [deliveryStep, setDeliveryStep] = useState(null);
   const [deliveryData, setDeliveryData] = useState({});
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [clientOnline, setClientOnline] = useState(true);
 
   useEffect(() => {
     document.querySelector(".cd-main-scroll")?.scrollTo(0, 0);
@@ -59,12 +63,41 @@ export default function ClientDashboard({ currentUser, onLogout, addToast }) {
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
 
+  useEffect(() => {
+    // Restore pending flow (choose/select) so user can continue after navigation.
+    try {
+      const raw = localStorage.getItem(FLOW_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved?.requestId && !deliveryStep) {
+        setDeliveryData(saved);
+        setDeliveryStep("choose");
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    // Persist only if we already have a created request.
+    if (deliveryData?.requestId && ["choose", "checkout", "success"].includes(deliveryStep || "")) {
+      try { localStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(deliveryData)); } catch {}
+      return;
+    }
+    if (!deliveryStep) {
+      try { localStorage.removeItem(FLOW_STORAGE_KEY); } catch {}
+    }
+  }, [deliveryStep, deliveryData]);
+
   function startNewDelivery() { setDeliveryStep("form"); }
   function goToChoose(formData) { setDeliveryData((d) => ({ ...d, ...formData })); setDeliveryStep("choose"); }
   function goToProfile(deliverer) { setDeliveryData((d) => ({ ...d, deliverer })); setDeliveryStep("profile"); }
   function goToCheckout(deliverer) { setDeliveryData((d) => ({ ...d, deliverer })); setDeliveryStep("checkout"); }
   function goToSuccess() { setDeliveryStep("success"); }
-  function exitDeliveryFlow() { setDeliveryStep(null); setDeliveryData({}); }
+  function pauseDeliveryFlow() { setDeliveryStep(null); }
+  function exitDeliveryFlow() {
+    setDeliveryStep(null);
+    setDeliveryData({});
+    try { localStorage.removeItem(FLOW_STORAGE_KEY); } catch {}
+  }
   function openTrackChatFromSuccess() {
     setDeliveryStep(null);
     setDeliveryData({});
@@ -73,11 +106,12 @@ export default function ClientDashboard({ currentUser, onLogout, addToast }) {
   }
 
   function handleSidebarNav(key) {
-    exitDeliveryFlow();
+    pauseDeliveryFlow();
     setActive(key);
   }
 
   const inDeliveryFlow = deliveryStep !== null;
+  const savedPendingRequest = Boolean(!inDeliveryFlow && deliveryData?.requestId);
 
   const sidebarProps = {
     currentUser,
@@ -143,9 +177,44 @@ export default function ClientDashboard({ currentUser, onLogout, addToast }) {
           </div>
 
           <main className="cd-main-scroll cd-scroll flex-1 overflow-y-auto" style={{ background: "#060c18", minWidth: 0 }}>
+            {savedPendingRequest && (
+              <div
+                style={{
+                  margin: "14px 16px 0",
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  background: "rgba(37,99,235,0.12)",
+                  border: "1px solid rgba(37,99,235,0.35)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                }}
+              >
+                <span style={{ fontSize: 12, color: "#bfdbfe", fontWeight: 600 }}>
+                  You have a pending request. Continue choosing a deliverer.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryStep("choose")}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(191,219,254,0.4)",
+                    background: "rgba(191,219,254,0.08)",
+                    color: "#dbeafe",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Resume
+                </button>
+              </div>
+            )}
 
             {deliveryStep === "form" && (
-              <NewDeliveryPage onNext={goToChoose} onBack={exitDeliveryFlow} addToast={addToast} />
+              <NewDeliveryPage currentUser={currentUser} onNext={goToChoose} onBack={exitDeliveryFlow} addToast={addToast} />
             )}
             {deliveryStep === "choose" && (
               <ChooseDelivererPage
@@ -185,16 +254,28 @@ export default function ClientDashboard({ currentUser, onLogout, addToast }) {
                 addToast={addToast}
                 onNewDelivery={startNewDelivery}
                 onSettings={() => setActive("settings")}
+                isOnline={clientOnline}
+                onToggleOnline={setClientOnline}
               />
             )}
             {!inDeliveryFlow && active === "track" && (
-              <PageTrack currentUser={currentUser} setActive={setActive} addToast={addToast} startPanel={trackStartPanel} onSettings={() => setActive("settings")} />
+              <PageTrack
+                currentUser={currentUser}
+                setActive={setActive}
+                addToast={addToast}
+                startPanel={trackStartPanel}
+                onSettings={() => setActive("settings")}
+                orderId={deliveryData?.orderId || deliveryData?.deliveryId || null}
+              />
             )}
             {!inDeliveryFlow && active === "wallet" && (
               <PageWallet setActive={setActive} addToast={addToast} currentUser={currentUser} onSettings={() => setActive("settings")} />
             )}
             {!inDeliveryFlow && active === "settings" && (
               <PageSettings currentUser={currentUser} setActive={setActive} addToast={addToast} />
+            )}
+            {!inDeliveryFlow && active === "profile" && (
+              <PageProfile currentUser={currentUser} />
             )}
             {!inDeliveryFlow && active === "support" && (
               <PageSupport currentUser={currentUser} setActive={setActive} addToast={addToast} />

@@ -4,12 +4,11 @@
 // ═══════════════════════════════════════════════════════════
 import { useState } from 'react';
 import { CityBanner } from './Shared';
+import { http } from '../api/http';
 
-// ─── FAKE API (replace with real endpoint later) ──────────
-// TODO: POST /api/v1/deliveries/request
-async function fakeSubmitDeliveryRequest(data) {
-  await new Promise(r => setTimeout(r, 900));
-  return { success: true, requestId: `REQ-${Date.now()}` };
+async function submitDeliveryRequest(payload) {
+  const res = await http.post('/client/requests', payload);
+  return res?.data;
 }
 
 const IS = { // inputStyle
@@ -62,34 +61,50 @@ function ModeTab({ label, active, onClick, accent }) {
 }
 
 // ─── FAKE MAP PIN-DROP ────────────────────────────────────
+async function reverseGeocode(lat, lng) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`;
+    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    const data = await res.json();
+    return data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  } catch {
+    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
+}
+
 function MapPicker({ accent, onConfirm }) {
   const [state,   setState]   = useState('idle');   // idle | locating | pinned
   const [address, setAddress] = useState('');
+  const [coords, setCoords] = useState(null); // [lat, lng]
   const rgb = accent === '#4EDEA3' ? '78,222,163' : '173,198,255';
-  const FAKE_ADDR = accent === '#4EDEA3'
-    ? '12 Rue Didouche Mourad, Algiers'
-    : 'Résidence Sahraoui, Hydra';
+  const mapRef = useState(() => ({ current: null }))[0];
+  const mapObj = useState(() => ({ current: null }))[0];
+  const markerRef = useState(() => ({ current: null }))[0];
 
-  function handleMapClick() {
-    if (state === 'locating') return;
-    setState('locating');
-    // TODO: replace with real Leaflet click → lat/lng → reverse-geocode API
-    setTimeout(() => {
-      setState('pinned');
-      setAddress(FAKE_ADDR);
-    }, 700);
+  function ensureLeaflet(cb) {
+    if (window.L) { cb(); return; }
+    if (!document.querySelector('#leaflet-css')) {
+      const link = document.createElement('link');
+      link.id='leaflet-css'; link.rel='stylesheet';
+      link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    const script = document.createElement('script');
+    script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload=cb;
+    document.head.appendChild(script);
   }
 
   function handleReset() {
     setState('idle');
     setAddress('');
+    setCoords(null);
   }
 
   return (
     <div>
       {/* Map area */}
       <div
-        onClick={handleMapClick}
         style={{
           borderRadius: state === 'pinned' ? '12px 12px 0 0' : 12,
           border: `1px solid rgba(${rgb},0.22)`,
@@ -99,6 +114,10 @@ function MapPicker({ accent, onConfirm }) {
           cursor: state === 'locating' ? 'wait' : 'crosshair',
           overflow: 'hidden',
         }}>
+        <div
+          ref={(el) => { mapRef.current = el; }}
+          style={{ position: 'absolute', inset: 0 }}
+        />
         {/* dot grid */}
         <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:0.13, pointerEvents:'none' }}>
           <defs><pattern id={`dp-${rgb}`} width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.8" fill={accent}/></pattern></defs>
@@ -112,7 +131,7 @@ function MapPicker({ accent, onConfirm }) {
         </svg>
 
         {/* Pinned marker dot */}
-        {state === 'pinned' && (
+        {state === 'pinned' && coords && (
           <div style={{ position:'absolute', top:'38%', left:'42%', transform:'translate(-50%,-50%)', zIndex:2 }}>
             <div style={{ width:16, height:16, borderRadius:'50%', background:accent, border:'2.5px solid #071828', boxShadow:`0 0 10px ${accent}` }}/>
             <div style={{ width:6, height:6, background:accent, clipPath:'polygon(50% 100%,0 0,100% 0)', margin:'-2px auto 0', opacity:0.8 }}/>
@@ -163,7 +182,7 @@ function MapPicker({ accent, onConfirm }) {
               Repin
             </button>
             <button
-              onClick={() => onConfirm(address)}
+              onClick={() => coords && onConfirm({ address, coords })}
               style={{ fontSize:10, fontWeight:700, color:'#071828', background:accent, border:'none', borderRadius:6, padding:'4px 11px', cursor:'pointer', fontFamily:"'DM Sans',system-ui,sans-serif", letterSpacing:'0.04em' }}>
               USE THIS ✓
             </button>
@@ -175,7 +194,7 @@ function MapPicker({ accent, onConfirm }) {
 }
 
 // ─── ADDRESS FIELD (ENTER + MAP tabs) ─────────────────────
-function AddressField({ accent, label, value, onChange, mode, onModeChange }) {
+function AddressField({ accent, label, value, onChange, mode, onModeChange, onCoordsChange }) {
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
@@ -198,14 +217,21 @@ function AddressField({ accent, label, value, onChange, mode, onModeChange }) {
           style={IS}
         />
       ) : (
-        <MapPicker accent={accent} onConfirm={addr => { onChange(addr); onModeChange('enter'); }}/>
+        <MapPicker
+          accent={accent}
+          onConfirm={async ({ address, coords }) => {
+            onChange(address);
+            onCoordsChange?.(coords);
+            onModeChange('enter');
+          }}
+        />
       )}
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════
-export default function NewDeliveryPage({ addToast, onNext, onBack }) {
+export default function NewDeliveryPage({ currentUser, addToast, onNext, onBack }) {
   const [desc,        setDesc]        = useState('');
   const [size,        setSize]        = useState('30×20×15 cm');
   const [weight,      setWeight]      = useState('4.5');
@@ -215,6 +241,8 @@ export default function NewDeliveryPage({ addToast, onNext, onBack }) {
   const [dropoff,     setDropoff]     = useState('');
   const [pickupMode,  setPickupMode]  = useState('enter');
   const [dropoffMode, setDropoffMode] = useState('map');
+  const [pickupCoords, setPickupCoords] = useState(null);   // [lat,lng]
+  const [dropoffCoords, setDropoffCoords] = useState(null); // [lat,lng]
   const [schedule,    setSchedule]    = useState('Immediate Dispatch');
   const [loading,     setLoading]     = useState(false);
 
@@ -224,10 +252,40 @@ export default function NewDeliveryPage({ addToast, onNext, onBack }) {
     if (!dropoff.trim()) { addToast?.('error','Missing field','Please enter a drop-off address.'); return; }
     setLoading(true);
     try {
-      const res = await fakeSubmitDeliveryRequest({ desc, size, weight, fragile, pickup, dropoff, schedule });
-      onNext?.({ desc, size, weight, fragile, pickup, dropoff, schedule, requestId: res.requestId });
-    } catch {
-      addToast?.('error','Error','Failed to submit. Please try again.');
+      const clientId = currentUser?._id ?? currentUser?.id ?? currentUser?.client_id;
+      if (!clientId) throw new Error('Missing client id');
+
+      const res = await submitDeliveryRequest({
+        client_id: clientId,
+        pickup,
+        dropoff,
+        description: desc,
+        price: 250,
+        pickup_lat: pickupCoords?.[0] ?? null,
+        pickup_lng: pickupCoords?.[1] ?? null,
+        dropoff_lat: dropoffCoords?.[0] ?? null,
+        dropoff_lng: dropoffCoords?.[1] ?? null,
+      });
+
+      const requestId = res?.requestId ?? res?.data?.requestId;
+      if (!requestId) throw new Error(res?.message || 'No request id returned');
+
+      onNext?.({
+        desc,
+        size,
+        weight,
+        fragile,
+        pickup,
+        dropoff,
+        pickupCoords,
+        dropoffCoords,
+        schedule,
+        requestId,
+      });
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to submit. Please try again.';
+      addToast?.('error', 'Error', msg);
+    } finally {
       setLoading(false);
     }
   }
@@ -364,7 +422,7 @@ export default function NewDeliveryPage({ addToast, onNext, onBack }) {
               </div>
 
               {/* Pickup */}
-              <AddressField accent="#4EDEA3" label="PICKUP ADDRESS" value={pickup} onChange={setPickup} mode={pickupMode} onModeChange={setPickupMode}/>
+              <AddressField accent="#4EDEA3" label="PICKUP ADDRESS" value={pickup} onChange={setPickup} mode={pickupMode} onModeChange={setPickupMode} onCoordsChange={setPickupCoords}/>
 
               {/* Route connector — clean vertical line with dots */}
               <div style={{ display:'flex', gap:0, margin:'12px 0 12px 4px', alignItems:'stretch' }}>
@@ -382,7 +440,7 @@ export default function NewDeliveryPage({ addToast, onNext, onBack }) {
 
               {/* Drop-off */}
               <div style={{ marginBottom:20 }}>
-                <AddressField accent="#ADC6FF" label="DROP-OFF ADDRESS" value={dropoff} onChange={setDropoff} mode={dropoffMode} onModeChange={setDropoffMode}/>
+                <AddressField accent="#ADC6FF" label="DROP-OFF ADDRESS" value={dropoff} onChange={setDropoff} mode={dropoffMode} onModeChange={setDropoffMode} onCoordsChange={setDropoffCoords}/>
               </div>
 
               {/* Schedule */}

@@ -1,9 +1,7 @@
 // DelivererOverviewPage.jsx
 import { useState, useEffect } from "react";
-import { TrendingUp, Star, Package, ChevronRight, X,ChevronDown } from "lucide-react";
+import { TrendingUp, Star, Package, ChevronRight, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
 import {
   getDelivererStats,
   getRecentDeliveries,
@@ -196,16 +194,13 @@ function DeliveryHistoryModal({ onClose }) {
 }
 
 // ── Main component ───────────────────────────────────────
-export default function DelivererOverviewPage({ currentUser, isOnline,setIsOnline }) {
-  const navigate = useNavigate();
+export default function DelivererOverviewPage({ currentUser }) {
   const [stats,       setStats]       = useState(null);
   const [deliveries,  setDeliveries]  = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   const [isMobile,    setIsMobile]    = useState(false);
   const [isTablet,    setIsTablet]    = useState(false);
-   [isOnline,setIsOnline] = useState();
-
   useEffect(() => {
     const check = () => {
       setIsMobile(window.innerWidth < 640);
@@ -247,26 +242,7 @@ export default function DelivererOverviewPage({ currentUser, isOnline,setIsOnlin
             Here's your delivery status for today.
           </p>
         </div>
-         <button
-                  onClick={() => setIsOnline(prev=>!prev)}
-                  
-                  className="!flex !items-center !gap-2 !px-4 !py-2 !rounded-xl !text-[13px] !font-semibold !cursor-pointer !border !transition-all"
-                  style={{
-                    background:  isOnline ? "rgba(16,185,129,0.1)"     : "rgba(100,116,139,0.1)",
-                    borderColor: isOnline ? "rgba(16,185,129,0.35)"    : "rgba(100,116,139,0.3)",
-                    color:       isOnline ? "#10b981"                  : "#64748b",
-                  }}
-                >
-                  <div className="!w-2 !h-2 !rounded-full"
-                    style={{
-                      background:  isOnline ? "#10b981" : "#64748b",
-                      boxShadow:   isOnline ? "0 0 0 3px rgba(16,185,129,0.25)" : "none",
-                    }}
-                  />
-                  {isOnline ? "Online Status" : "Go Online"}
-                  <ChevronDown size={13} />
-                </button>
-              </div>
+        </div>
 
         {/* Stat cards — 1 col mobile, 3 col desktop */}
         {!loading && stats && (

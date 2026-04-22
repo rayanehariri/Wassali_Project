@@ -2,15 +2,20 @@
 // DelivererHistory.jsx — Past deliverers list
 // Re-order Service → triggers new delivery flow
 // ═══════════════════════════════════════════════════════════
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ReviewModal    from './ReviewModal';
 import TrackChatPanel from './TrackChatPanel';
+import { http } from '../../api/http';
 
-const DELIVERERS = [
-  { id:'yassine-b', name:'Yassine B.', initials:'YB', reviews:128, rating:4.9, lastOrderAmount:'1,200 DZD', lastOrderDate:'Oct 12, 2023', tags:['Express','Groceries','Fragile'], avatarColor:'linear-gradient(135deg,#1a4a6a,#0d2a4a)', avatarBorder:'rgba(78,222,163,0.4)' },
-  { id:'ahmed-s',   name:'Ahmed S.',   initials:'AS', reviews:94,  rating:4.7, lastOrderAmount:'850 DZD',   lastOrderDate:'Oct 08, 2023', tags:['Pharmacy','Documents'],       avatarColor:'linear-gradient(135deg,#3a2a1a,#2a1a0d)', avatarBorder:'rgba(251,191,36,0.4)'  },
-  { id:'lina-m',    name:'Lina M.',    initials:'LM', reviews:215, rating:5.0, lastOrderAmount:'2,100 DZD', lastOrderDate:'Sep 28, 2023', tags:['Gifts','Electronics','Express'],avatarColor:'linear-gradient(135deg,#4a1a3a,#2a0d2a)', avatarBorder:'rgba(167,139,250,0.4)' },
-];
+function initials(name) {
+  return String(name || 'D')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join('') || 'D';
+}
 
 const TAG_STYLE = {
   Express:     { bg:'rgba(96,165,250,0.12)',  border:'rgba(96,165,250,0.25)',  color:'#60a5fa'  },
@@ -39,6 +44,52 @@ function Stars({ rating }) {
 export default function DelivererHistory({ onBack, onNewDelivery }) {
   const [reviewTarget, setReviewTarget] = useState(null);
   const [chatTarget,   setChatTarget]   = useState(null);
+  const [deliverers, setDeliverers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const mapped = useMemo(() => {
+    return (deliverers || []).map((d, idx) => {
+      const name = d.name || 'Deliverer';
+      const init = initials(name);
+      // stable-ish palette
+      const palettes = [
+        { avatarColor: 'linear-gradient(135deg,#1a4a6a,#0d2a4a)', avatarBorder: 'rgba(78,222,163,0.4)' },
+        { avatarColor: 'linear-gradient(135deg,#3a2a1a,#2a1a0d)', avatarBorder: 'rgba(251,191,36,0.4)' },
+        { avatarColor: 'linear-gradient(135deg,#4a1a3a,#2a0d2a)', avatarBorder: 'rgba(167,139,250,0.4)' },
+      ];
+      const p = palettes[idx % palettes.length];
+      return {
+        id: d.deliverer_id || String(idx),
+        name,
+        initials: init,
+        reviews: 0,
+        rating: 5.0,
+        lastOrderAmount: `${Number(d.lastOrderAmount || 0).toLocaleString()} DZD`,
+        lastOrderDate: (d.lastOrderDate || '').slice(0, 10) || '—',
+        tags: ['Express'],
+        ...p,
+      };
+    });
+  }, [deliverers]);
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      setLoading(true);
+      try {
+        const res = await http.get('/client/deliverers/history');
+        const list = res?.data?.deliverers ?? res?.data?.data?.deliverers ?? [];
+        if (!alive) return;
+        setDeliverers(list);
+      } catch {
+        if (alive) setDeliverers([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    }
+    load();
+    return () => { alive = false; };
+  }, []);
 
   return (
     <div style={{ minHeight:'100%', background:'linear-gradient(180deg,#071828 0%,#08172a 100%)', padding:'32px 40px', animation:'cdFadeUp .3s ease both' }}>
@@ -58,7 +109,15 @@ export default function DelivererHistory({ onBack, onNewDelivery }) {
       </div>
 
       <div style={{ display:'flex', flexDirection:'column', gap:14, maxWidth:680, margin:'0 auto' }}>
-        {DELIVERERS.map((d, idx) => (
+        {loading ? (
+          <div style={{ textAlign:'center', color:'rgba(255,255,255,0.45)', fontSize:12, fontFamily:"'DM Sans',system-ui,sans-serif" }}>
+            Loading deliverers…
+          </div>
+        ) : mapped.length === 0 ? (
+          <div style={{ textAlign:'center', color:'rgba(255,255,255,0.45)', fontSize:12, fontFamily:"'DM Sans',system-ui,sans-serif" }}>
+            No deliverer history yet.
+          </div>
+        ) : mapped.map((d, idx) => (
           <div key={d.id}
             style={{ background:'linear-gradient(135deg,rgba(13,42,74,0.9),rgba(9,28,52,0.9))', border:'1px solid rgba(255,255,255,0.08)', borderRadius:18, padding:'18px 20px', display:'grid', gridTemplateColumns:'auto 1fr auto', alignItems:'center', gap:16, animation:`cdFadeUp .3s ease ${idx*0.08}s both`, transition:'border-color .2s, transform .2s' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(59,130,246,0.3)'; e.currentTarget.style.transform='translateY(-1px)'; }}

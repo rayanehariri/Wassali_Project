@@ -1,6 +1,12 @@
+import { http } from "../../api/http";
 
-
-const delay = (ms = 400) => new Promise((res) => setTimeout(res, ms));
+function normalizeUiStatus(rawStatus) {
+  const s = String(rawStatus || "").toLowerCase();
+  if (s === "active") return "Active";
+  if (s === "banned" || s === "suspended") return "Banned";
+  if (s === "inactive" || s === "pending") return "Inactive";
+  return "Inactive";
+}
 
 // ─── Fake Users Data ────────────────────────────────────────────────────────────
 const fakeUsers = [
@@ -125,8 +131,22 @@ const fakeUserStats = {
  * return axios.get("/api/admin/users", { params: filters })
  */
 export async function getUsers(filters = {}) {
-  await delay();
-  let result = [...fakeUsers];
+  const res = await http.get("/admin/users");
+  const all = res?.data?.users ?? res?.data?.data?.users ?? [];
+
+  let result = all.map((u) => {
+    const name = u.name ?? u.username ?? "User";
+    return {
+      id: u._id ?? u.id,
+      name,
+      email: u.email ?? "",
+      avatar: (name || "U").split(" ").slice(0, 2).map((s) => s[0]).join("").toUpperCase(),
+      role: (u.role ?? "client").toString().toLowerCase() === "client" ? "Customer" : (u.role ?? "client").toString().replace(/\b\w/g, (c) => c.toUpperCase()),
+      joinDate: u.created_at ? String(u.created_at).slice(0, 10) : "",
+      orders: u.orders ?? null,
+      status: normalizeUiStatus(u.status),
+    };
+  });
 
   if (filters.role && filters.role !== "All Roles") {
     result = result.filter((u) => u.role === filters.role);
@@ -163,8 +183,20 @@ export async function getUsers(filters = {}) {
  * return axios.get(`/api/admin/users/${userId}`)
  */
 export async function getUserById(userId) {
-  await delay();
-  return fakeUsers.find((u) => u.id === userId) ?? null;
+  const res = await http.get(`/admin/users/${userId}`);
+  const u = res?.data?.user ?? res?.data?.data?.user;
+  if (!u) return null;
+  const name = u.name ?? u.username ?? "User";
+  return {
+    id: u._id ?? u.id,
+    name,
+    email: u.email ?? "",
+    avatar: (name || "U").split(" ").slice(0, 2).map((s) => s[0]).join("").toUpperCase(),
+    role: (u.role ?? "client").toString().toLowerCase() === "client" ? "Customer" : (u.role ?? "client").toString().replace(/\b\w/g, (c) => c.toUpperCase()),
+    joinDate: u.created_at ? String(u.created_at).slice(0, 10) : "",
+    orders: u.orders ?? null,
+    status: normalizeUiStatus(u.status),
+  };
 }
 
 /**
@@ -175,8 +207,8 @@ export async function getUserById(userId) {
  * return axios.get("/api/admin/users/stats")
  */
 export async function getUserStats() {
-  await delay();
-  return fakeUserStats;
+  const res = await http.get("/admin/users/stats");
+  return res?.data ?? res?.data?.data ?? fakeUserStats;
 }
 
 /**
@@ -188,16 +220,10 @@ export async function getUserStats() {
  * return axios.post("/api/admin/users", userData)
  */
 export async function createUser(userData) {
-  await delay();
-  const newUser = {
-    id: `USR-${String(fakeUsers.length + 1).padStart(3, "0")}`,
-    joinDate: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }),
-    orders: 0,
-    status: "Active",
-    ...userData,
-  };
-  fakeUsers.unshift(newUser);
-  return newUser;
+  const role = (userData?.role ?? "Customer").toString().toLowerCase() === "customer" ? "client" : (userData?.role ?? "client").toString().toLowerCase();
+  const status = (userData?.status ?? "Active").toString().toLowerCase();
+  const res = await http.post("/admin/users", { name: userData?.name, email: userData?.email, role, status });
+  return res?.data?.data?.user ?? userData;
 }
 
 /**
@@ -210,10 +236,9 @@ export async function createUser(userData) {
  * return axios.patch(`/api/admin/users/${userId}`, { status })
  */
 export async function updateUserStatus(userId, status) {
-  await delay();
-  const user = fakeUsers.find((u) => u.id === userId);
-  if (user) user.status = status;
-  return user ?? null;
+  const normalized = String(status || "").toLowerCase();
+  await http.patch(`/admin/users/${userId}`, { status: normalized });
+  return getUserById(userId);
 }
 
 /**
@@ -226,10 +251,10 @@ export async function updateUserStatus(userId, status) {
  * return axios.patch(`/api/admin/users/${userId}`, { role })
  */
 export async function updateUserRole(userId, role) {
-  await delay();
-  const user = fakeUsers.find((u) => u.id === userId);
-  if (user) user.role = role;
-  return user ?? null;
+  const normalized =
+    String(role || "").toLowerCase() === "customer" ? "client" : String(role || "").toLowerCase();
+  await http.patch(`/admin/users/${userId}`, { role: normalized });
+  return getUserById(userId);
 }
 
 /**
@@ -241,10 +266,8 @@ export async function updateUserRole(userId, role) {
  * return axios.delete(`/api/admin/users/${userId}`)
  */
 export async function deleteUser(userId) {
-  await delay();
-  const index = fakeUsers.findIndex((u) => u.id === userId);
-  if (index !== -1) fakeUsers.splice(index, 1);
-  return { success: true };
+  const res = await http.delete(`/admin/users/${userId}`);
+  return res?.data?.data ?? { success: true };
 }
 
 /**
@@ -255,9 +278,9 @@ export async function deleteUser(userId) {
  * return axios.get("/api/admin/users/export")
  */
 export async function exportUsersCSV() {
-  await delay();
+  const { users } = await getUsers({ role: "All Roles", status: "All Statuses", page: 1, limit: 5000 });
   const headers = ["ID", "Name", "Email", "Role", "Join Date", "Orders", "Status"];
-  const rows = fakeUsers.map((u) =>
+  const rows = users.map((u) =>
     [u.id, u.name, u.email, u.role, u.joinDate, u.orders ?? "-", u.status].join(",")
   );
   return [headers.join(","), ...rows].join("\n");

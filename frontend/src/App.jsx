@@ -10,6 +10,8 @@ import Nav from './common/NavBar';
 import Home from './Home/HomePage';
 import LoginPage from './auth/Login';
 import RegisterPage from './auth/Register';
+import VerifyPhonePage from './auth/VerifyPhonePage';
+import ResetPasswordPage from './auth/ResetPasswordPage';
 import { ForgotPage, CheckEmailPage } from './auth/Forgot';
 import DashPage from './AdminDash/DashPage';
 import DoP from './AdminDash/Dashover/DashOverPage';
@@ -21,6 +23,7 @@ import UserDetailPage from './AdminDash/UserDetailPage';
 import FinancePage from './AdminDash/Finances/finances';
 import ReportsPage from './AdminDash/Reports/ReportsPage';
 import AdminSettingsPage from './AdminDash/Settings/SettingsPage';
+import AdminProfilePage from './AdminDash/Profile/ProfilePage';
 import VehicleInfoPage, { UnderReviewPage, VerifiedPage } from './auth/VehicleInfoPage';
 import DelivererDashPage from './DelivererDash/DashPage';
 import DelivererOverviewPage from './DelivererDash/DashOver/DashOver';
@@ -35,6 +38,7 @@ import EarningsPolicyPage from './DelivererDash/Support/Earning';
 import DocViewerPage from './AdminDash/Docviewer';
 import ClientDashboard from './client/ClientDashboard';
 import { normalizeRole } from './auth/roles';
+import { http } from './api/http';
  
 // ── Chat pages — lazy loaded ──────────────────────────────────────────────────
 const AdminCourierChat      = lazy(() => import('./AdminDash/Admincourierchat'));
@@ -186,6 +190,7 @@ export default function App() {
   });
  
   const { toasts, addToast, removeToast } = useToast();
+  const [delivererOnline, setDelivererOnline] = useState(true);
  
   const [darkMode, setDarkMode] = useState(() => {
     try { return localStorage.getItem('darkMode') === 'true'; }
@@ -198,6 +203,47 @@ export default function App() {
   }, [darkMode]);
  
   useEffect(() => { window.scrollTo(0, 0); }, [location.pathname]);
+
+  // Validate persisted session against backend on app start/refresh.
+  // This prevents stale localStorage/fallback sessions from opening dashboards
+  // while API calls fail with 401 in background (showing empty tables).
+  useEffect(() => {
+    let cancelled = false;
+
+    async function validateSession() {
+      if (!currentUser) return;
+      try {
+        const res = await http.get('/auth/me/');
+        const backendUser = res?.data?.user ?? res?.data?.data?.user;
+        if (!backendUser || cancelled) return;
+
+        const merged = {
+          ...currentUser,
+          id: backendUser._id ?? currentUser.id,
+          role: normalizeRole(backendUser.role) || currentUser.role,
+          status: backendUser.status ?? currentUser.status,
+          onboardingDone: backendUser.onboardingDone ?? currentUser.onboardingDone,
+        };
+        setCurrentUser(merged);
+        try { localStorage.setItem('currentUser', JSON.stringify(merged)); } catch {}
+      } catch {
+        if (cancelled) return;
+        setCurrentUser(null);
+        try {
+          localStorage.removeItem('currentUser');
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+        } catch {}
+        if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/client-dashboard') || location.pathname.startsWith('/deliverer-dashboard')) {
+          navigate('/login', { replace: true });
+        }
+      }
+    }
+
+    validateSession();
+    return () => { cancelled = true; };
+  }, []);
  
   // ── Firebase: restore uid after page refresh ────────────────────────────
   useEffect(() => {
@@ -310,7 +356,7 @@ export default function App() {
   }
  
   // ── Hide the public navbar inside dashboards & auth pages ──────────────
-  const authPaths      = ['/login', '/register', '/forgot', '/check-email'];
+  const authPaths      = ['/login', '/register', '/verify-phone', '/forgot', '/check-email', '/reset-password'];
   const delivererPaths = ['/onboarding', '/under-review', '/verified', '/deliverer-dashboard'];
   const hideNav =
     authPaths.includes(location.pathname) ||
@@ -343,6 +389,16 @@ export default function App() {
         <Route path="/register" element={
           <AuthRoute currentUser={currentUser}>
             <RegisterPage addToast={addToast} />
+          </AuthRoute>
+        }/>
+        <Route path="/verify-phone" element={
+          <AuthRoute currentUser={currentUser}>
+            <VerifyPhonePage addToast={addToast} />
+          </AuthRoute>
+        }/>
+        <Route path="/reset-password" element={
+          <AuthRoute currentUser={currentUser}>
+            <ResetPasswordPage addToast={addToast} />
           </AuthRoute>
         }/>
         <Route path="/forgot" element={
@@ -426,7 +482,7 @@ export default function App() {
               ? <Navigate to="/onboarding" replace />
               : currentUser?.role === 'deliverer' && currentUser?.status === 'pending'
               ? <Navigate to="/under-review" replace />
-              : <DelivererDashPage currentUser={currentUser} onLogout={handleLogout} />
+              : <DelivererDashPage currentUser={currentUser} onLogout={handleLogout} isOnline={delivererOnline} setIsOnline={setDelivererOnline} />
             }
           </DelivererOnlyRoute>
         }>
@@ -469,6 +525,7 @@ export default function App() {
           <Route path="verification"     element={<VerificationPage currentUser={currentUser} onLogout={handleLogout} />} />
           <Route path="finances"         element={<FinancePage addToast={addToast} />} />
           <Route path="reports"          element={<ReportsPage />} />
+          <Route path="profile"          element={<AdminProfilePage currentUser={currentUser} />} />
           <Route path="settings"         element={<AdminSettingsPage currentUser={currentUser} />} />
           
         </Route>

@@ -6,7 +6,7 @@ import DelivererTopBar from "./TopBar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Menu, X } from "lucide-react";
  
-export default function DelivererDashPage({ currentUser, onLogout }) {
+export default function DelivererDashPage({ currentUser, onLogout, isOnline, setIsOnline }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
  
@@ -83,6 +83,8 @@ useEffect(() => {
             onLogout={onLogout}
             isMobile={isMobile}
             onMenuClick={() => setSidebarOpen(p => !p)}
+            isOnline={isOnline}
+            onToggleOnline={setIsOnline}
           />
           <main style={{ flex: 1, overflowY: "auto" }}>
             <Outlet />

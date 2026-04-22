@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════
 import { useState, useRef, useEffect } from 'react';
 import DelivererProfilePage from './Delivererprofilepage';
+import { http } from '../api/http';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -15,15 +16,14 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-// ─── FAKE API ─────────────────────────────────────────────
-async function fakeFetchAvailableDeliverers(deliveryData) {
-  await new Promise(r => setTimeout(r, 700));
-  return [
-    { id:1, name:'Yassine B.', initials:'YB', rating:4.9, reviews:1240, distance:'1.2 KM AWAY', distanceKm:1.2, price:250, cats:['GROCERIES','PHARMACY'],  lat:36.762, lng:3.058, vehicle:'Motorcycle', trips:234 },
-    { id:2, name:'Lina M.',    initials:'LM', rating:5.0, reviews:89,   distance:'0.8 KM AWAY', distanceKm:0.8, price:150, cats:['PACKAGES','GROCERIES'],   lat:36.748, lng:3.043, vehicle:'Car',        trips:89  },
-    { id:3, name:'Karim D.',   initials:'KD', rating:4.7, reviews:412,  distance:'2.1 KM AWAY', distanceKm:2.1, price:200, cats:['PHARMACY','PACKAGES'],    lat:36.770, lng:3.072, vehicle:'Motorcycle', trips:412 },
-    { id:4, name:'Amira S.',   initials:'AS', rating:4.8, reviews:203,  distance:'1.6 KM AWAY', distanceKm:1.6, price:180, cats:['GROCERIES'],              lat:36.742, lng:3.030, vehicle:'Car',        trips:203 },
-  ];
+async function fetchOffers(requestId) {
+  const res = await http.get(`/client/requests/${requestId}/offers`);
+  return res?.data;
+}
+
+async function selectDeliverer(requestId, delivererId) {
+  const res = await http.post(`/client/requests/${requestId}/select`, { deliverer_id: delivererId });
+  return res?.data;
 }
 
 // ─── LEAFLET MAP ──────────────────────────────────────────
@@ -117,21 +117,95 @@ export default function ChooseDelivererPage({ deliveryData, onNext, onBack }) {
   const [confirming,   setConfirming]   = useState(false);
   // null | deliverer object — when set, show profile page
   const [profileView,  setProfileView]  = useState(null);
+  const [selectError,   setSelectError]   = useState(null);
 
   useEffect(() => {
-    fakeFetchAvailableDeliverers(deliveryData).then(list => {
-      setDeliverers(list);
-      setLoadingList(false);
-    });
-  }, []);
+    let isMounted = true;
+    let timer = null;
+
+    async function poll() {
+      try {
+        const requestId = deliveryData?.requestId;
+        if (!requestId) {
+          if (isMounted) setLoadingList(false);
+          return;
+        }
+        const data = await fetchOffers(requestId);
+        const offers = data?.offers ?? [];
+
+        const mapped = offers.map((o, idx) => {
+          const name = o?.deliverer?.name ?? 'Deliverer';
+          const initials = name.split(' ').slice(0, 2).map(s => s[0]).join('').toUpperCase().slice(0, 2) || 'D';
+          return {
+            id: o.deliverer_id,
+            name,
+            initials,
+            rating: 4.8,
+            reviews: 120,
+            distance: 'NEARBY',
+            distanceKm: 1.2,
+            price: Number(deliveryData?.price ?? 250),
+            cats: ['PACKAGES'],
+            lat: 36.762 + (idx * 0.003),
+            lng: 3.058 + (idx * 0.003),
+            vehicle: 'Motorcycle',
+            trips: 100,
+          };
+        });
+
+        if (isMounted) {
+          setDeliverers(mapped);
+          setLoadingList(false);
+        }
+      } finally {
+        if (isMounted) timer = setTimeout(poll, 2000);
+      }
+    }
+
+    poll();
+
+    return () => {
+      isMounted = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [deliveryData?.requestId]);
 
   async function handleSelect(d) {
     if (confirming) return;
+    const requestId = deliveryData?.requestId;
+    if (!requestId) {
+      setSelectError("Missing delivery request. Go back and try again.");
+      return;
+    }
+    setSelectError(null);
     setSelected(d.id);
     setConfirming(true);
-    await new Promise(r => setTimeout(r, 600));
-    setConfirming(false);
-    onNext?.(d);
+    try {
+      const result = await selectDeliverer(requestId, d.id);
+      if (result?.success === false) {
+        setSelectError(result?.message || "Selection failed. Please try another courier.");
+        setSelected(null);
+        setProfileView(null);
+        return;
+      }
+      const orderId = result?.orderId ?? result?.data?.orderId;
+      onNext?.({ ...d, orderId });
+    } catch (e) {
+      const code = e.response?.data?.code;
+      const msg = e.response?.data?.message;
+      const busy =
+        code === "DELIVERER_BUSY" ||
+        /no longer available|already assigned|no longer available|busy/i.test(String(msg || ""));
+      setSelectError(
+        busy
+          ? (msg || "This courier is already on another delivery. Please choose someone else.")
+          : (msg || "We could not confirm this courier. They may no longer be available — try another partner.")
+      );
+      setSelected(null);
+      setProfileView(null);
+    } finally {
+      setConfirming(false);
+    }
   }
 
   // Show profile page overlay
@@ -140,7 +214,7 @@ export default function ChooseDelivererPage({ deliveryData, onNext, onBack }) {
       <DelivererProfilePage
         deliverer={profileView}
         onAccept={(d) => handleSelect(d)}
-        onBack={() => setProfileView(null)}
+        onBack={() => { setProfileView(null); setSelectError(null); }}
       />
     );
   }
@@ -165,6 +239,37 @@ export default function ChooseDelivererPage({ deliveryData, onNext, onBack }) {
         <p style={{ margin:'0 0 22px', fontSize:13, color:'rgba(255,255,255,0.45)', fontFamily:"'DM Sans',system-ui,sans-serif" }}>
           {loadingList ? 'Finding partners near you…' : `${deliverers.length} available partners near your location`}
         </p>
+
+        {selectError && (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 18,
+              padding: '12px 14px',
+              borderRadius: 12,
+              border: '1px solid rgba(248,113,113,0.35)',
+              background: 'linear-gradient(135deg, rgba(248,113,113,0.12), rgba(15,23,42,0.6))',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 10,
+            }}
+          >
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(248,113,113,0.15)', border: '1px solid rgba(248,113,113,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700, color: '#fecaca', fontFamily: "'DM Sans',system-ui,sans-serif" }}>Unable to assign this courier</p>
+              <p style={{ margin: 0, fontSize: 12, color: 'rgba(248,250,252,0.85)', lineHeight: 1.45, fontFamily: "'DM Sans',system-ui,sans-serif" }}>{selectError}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectError(null)}
+              style={{ flexShrink: 0, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontFamily: "'DM Sans',system-ui,sans-serif" }}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Route summary */}
         {deliveryData?.pickup && (

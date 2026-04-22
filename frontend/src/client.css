@@ -78,6 +78,9 @@ html, body {
 .cd-scroll::-webkit-scrollbar-track { background: transparent; }
 .cd-scroll::-webkit-scrollbar-thumb { background: rgba(59,130,246,0.18); border-radius: 2px; }
 .cd-scroll::-webkit-scrollbar-thumb:hover { background: rgba(59,130,246,0.32); }
+.cd-main-scroll {
+  scrollbar-gutter: stable;
+}
 
 select option { background: #0d1f38; color: white; }
 

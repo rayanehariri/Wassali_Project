@@ -168,9 +168,14 @@ export default function DelivererProfilePage({ deliverer, onAccept, onBack }) {
   const d = deliverer;
 
   async function handleAccept() {
+    if (accepting) return;
     setAccepting(true);
-    await new Promise(r => setTimeout(r, 600));
-    onAccept?.(d);
+    try {
+      await new Promise((r) => setTimeout(r, 280));
+      await onAccept?.(d);
+    } finally {
+      setAccepting(false);
+    }
   }
 
   return (

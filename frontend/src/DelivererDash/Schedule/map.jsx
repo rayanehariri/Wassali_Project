@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import { getCurrentOrder, getTodayStats, callCustomer, navigateToOrder } from "./FakeApi";
+import { http } from "../../api/http";
 
 // Fix leaflet default icon issue with bundlers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -83,6 +84,7 @@ export default function DelivererMapPage() {
   const [loading,     setLoading]     = useState(true);
   const [calling,     setCalling]     = useState(false);
   const [navigating,  setNavigating]  = useState(false);
+  const [completing,  setCompleting]  = useState(false);
 
   useEffect(() => {
     async function fetchAll() {
@@ -114,6 +116,21 @@ export default function DelivererMapPage() {
     setNavigating(false);
     // Open maps
     if (result?.deepLink) window.open(result.deepLink, "_blank");
+  }
+
+  async function handleComplete() {
+    if (!order) return;
+    setCompleting(true);
+    try {
+      await http.post(`/deliverer/deliveries/mark_delivered/${order.id}`);
+      // Refresh UI: no active order after completion
+      setOrder(null);
+      window.alert("Delivery marked as completed. You can accept another request now.");
+    } catch (e) {
+      window.alert(e.response?.data?.message || e.message || "Could not complete delivery.");
+    } finally {
+      setCompleting(false);
+    }
   }
 
   const routeCoords = order
@@ -273,6 +290,69 @@ export default function DelivererMapPage() {
               ? <span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "white", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
               : <><Navigation size={14} /> Navigate</>
             }
+          </button>
+
+          {/* Complete button */}
+          <button
+            onClick={handleComplete}
+            disabled={completing}
+            style={{
+              width: "100%",
+              height: 40,
+              borderRadius: 10,
+              marginTop: 10,
+              background: completing ? "rgba(16,185,129,0.18)" : "linear-gradient(135deg, #10b981, #34d399)",
+              border: "none",
+              cursor: completing ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              boxShadow: "0 4px 14px rgba(16,185,129,0.35)",
+              fontSize: 13,
+              fontWeight: 800,
+              color: "#052016",
+              opacity: completing ? 0.7 : 1,
+            }}
+            title="Mark this delivery as completed"
+          >
+            {completing ? "Completing..." : "Mark Delivered ✓"}
+          </button>
+        </div>
+      )}
+
+      {!loading && !order && (
+        <div style={{
+          position: "absolute",
+          top: 16,
+          left: 16,
+          zIndex: 10,
+          width: 260,
+          borderRadius: 16,
+          background: "rgba(11,21,37,0.92)",
+          border: "1px solid #1e2d3d",
+          backdropFilter: "blur(12px)",
+          padding: "16px",
+        }}>
+          <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>
+            No active delivery. Go to Schedule to accept a new request.
+          </p>
+          <button
+            onClick={() => navigate("/deliverer-dashboard/schedule")}
+            style={{
+              marginTop: 10,
+              width: "100%",
+              height: 38,
+              borderRadius: 10,
+              background: "rgba(37,99,235,0.15)",
+              border: "1px solid rgba(37,99,235,0.35)",
+              color: "#60a5fa",
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            Go to Schedule
           </button>
         </div>
       )}

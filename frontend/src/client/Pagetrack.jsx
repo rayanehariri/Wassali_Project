@@ -4,7 +4,8 @@
 // DelivererHistory accessible via sidebar "View History" link
 // ═══════════════════════════════════════════════════════════
 import { useRef, useEffect, useState } from 'react';
-import { ORDERS, Badge, TopBar } from './Shared';
+import { Badge, TopBar } from './Shared';
+import { http } from '../api/http';
 
 import DelivererHistory from './track/DelivererHistory';
 import TrackChatPanel   from './track/TrackChatPanel';
@@ -21,6 +22,7 @@ function escapeHtml(value) {
 function LeafletMap({ order }) {
   const mapRef = useRef(null);
   const mapObj = useRef(null);
+  const layersRef = useRef(null);
 
   useEffect(() => {
     function ensureLeaflet(cb) {
@@ -43,37 +45,109 @@ function LeafletMap({ order }) {
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(map);
       L.control.zoom({ position:'topleft' }).addTo(map);
       mapObj.current = map;
-
-      if (order) {
-        const mk = (color, glow) => L.divIcon({
-          className:'',
-          html:`<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2.5px solid #0e3a4a;${glow?`box-shadow:0 0 10px ${glow}`:''}"></div>`,
-          iconSize:[14,14], iconAnchor:[7,7],
-        });
-        const pickup  = [order.lat+0.02, order.lng-0.03];
-        const dest    = [order.lat-0.01, order.lng+0.04];
-        const courier = [order.lat+0.005, order.lng+0.01];
-
-        L.marker(pickup,  { icon:mk('#4ade80','rgba(74,222,128,.8)')  }).addTo(map).bindPopup(`<b>Pickup:</b> ${escapeHtml(order.from)}`);
-        L.marker(dest,    { icon:mk('#f87171')                         }).addTo(map).bindPopup(`<b>Destination:</b> ${escapeHtml(order.to)}`);
-        L.marker(courier, { icon:mk('#3b82f6','rgba(59,130,246,.9)') }).addTo(map).bindPopup(`<b>Courier:</b> ${escapeHtml(order.courier)}`);
-        L.polyline([pickup,courier,dest], { color:'#3b82f6', weight:3, opacity:0.7, dashArray:'8 5' }).addTo(map);
-        map.fitBounds([pickup,dest], { padding:[50,50] });
-      }
+      layersRef.current = L.layerGroup().addTo(map);
     });
 
     return () => { if (mapObj.current) { mapObj.current.remove(); mapObj.current = null; } };
   }, []);
 
+  useEffect(() => {
+    function ensureLeaflet(cb) {
+      if (window.L) { cb(); return; }
+      return; // map init effect will load leaflet
+    }
+    ensureLeaflet(() => {
+      const L = window.L;
+      const map = mapObj.current;
+      const layers = layersRef.current;
+      if (!L || !map || !layers) return;
+
+      layers.clearLayers();
+      if (!order) return;
+
+      const mk = (color, glow) => L.divIcon({
+        className:'',
+        html:`<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2.5px solid #0e3a4a;${glow?`box-shadow:0 0 10px ${glow}`:''}"></div>`,
+        iconSize:[14,14], iconAnchor:[7,7],
+      });
+
+      const pickup  = order.pickupCoords || [order.lat+0.02, order.lng-0.03];
+      const dest    = order.dropoffCoords || [order.lat-0.01, order.lng+0.04];
+      const courier = order.courierCoords || [(pickup[0] + dest[0]) / 2, (pickup[1] + dest[1]) / 2];
+
+      L.marker(pickup,  { icon:mk('#4ade80','rgba(74,222,128,.8)')  }).addTo(layers).bindPopup(`<b>Pickup:</b> ${escapeHtml(order.from)}`);
+      L.marker(dest,    { icon:mk('#f87171')                         }).addTo(layers).bindPopup(`<b>Destination:</b> ${escapeHtml(order.to)}`);
+      L.marker(courier, { icon:mk('#3b82f6','rgba(59,130,246,.9)') }).addTo(layers).bindPopup(`<b>Courier:</b> ${escapeHtml(order.courier)}`);
+      L.polyline([pickup,courier,dest], { color:'#3b82f6', weight:3, opacity:0.7, dashArray:'8 5' }).addTo(layers);
+      map.fitBounds([pickup,dest], { padding:[50,50] });
+    });
+  }, [order]);
+
   return <div ref={mapRef} style={{ position:'absolute', inset:0, width:'100%', height:'100%', zIndex:1 }}/>;
 }
 
-export default function PageTrack({ onNewDelivery, onSettings, startPanel = null, setActive, addToast, currentUser }) {
-  const order = ORDERS.find(o => o.status === 'in_transit');
+export default function PageTrack({ onNewDelivery, onSettings, startPanel = null, setActive, addToast, currentUser, orderId = null }) {
+  const [order, setOrder] = useState(null);
   const [panel, setPanel] = useState(null); // null | 'history' | 'chat'
+  const [loadingOrder, setLoadingOrder] = useState(true);
+
+  function toTrackOrder(delivery) {
+    if (!delivery) return null;
+    const pickup = delivery.pickup_address || 'Pickup';
+    const dropoff = delivery.dropoff_address || 'Dropoff';
+    const desc = delivery.description_of_order || 'Delivery';
+    const pickupCoords = Array.isArray(delivery.pickup_coords) ? delivery.pickup_coords : null;
+    const dropoffCoords = Array.isArray(delivery.dropoff_coords) ? delivery.dropoff_coords : null;
+    return {
+      id: `#${String(delivery._id || '').slice(0, 8)}`,
+      status: (delivery.status || '').toLowerCase() === 'delivered'
+        ? 'completed'
+        : (delivery.status || '').toLowerCase() === 'accepted'
+        ? 'in_transit'
+        : String(delivery.status || ''),
+      title: desc,
+      courier: delivery.deliverer_name || 'Assigned Deliverer',
+      client: delivery.client_name || 'Client',
+      av: 'DL',
+      eta: 'Live',
+      pct: 72,
+      from: pickup,
+      to: dropoff,
+      lat: 36.742,
+      lng: 3.038,
+      pickupCoords,
+      dropoffCoords,
+    };
+  }
+
   useEffect(() => {
     if (startPanel) setPanel(startPanel);
   }, [startPanel]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadOrder() {
+      setLoadingOrder(true);
+      try {
+        let res;
+        if (orderId) {
+          res = await http.get(`/client/deliveries/track/${orderId}`);
+        } else {
+          res = await http.get('/client/deliveries/active');
+        }
+        const delivery = res?.data?.delivery ?? res?.data?.data?.delivery ?? null;
+        if (!alive) return;
+        setOrder(toTrackOrder(delivery));
+      } catch {
+        if (!alive) return;
+        setOrder(null);
+      } finally {
+        if (alive) setLoadingOrder(false);
+      }
+    }
+    loadOrder();
+    return () => { alive = false; };
+  }, [orderId]);
 
   if (panel === 'history') {
     return <DelivererHistory onBack={() => setPanel(null)} onNewDelivery={onNewDelivery}/>;
@@ -114,6 +188,8 @@ export default function PageTrack({ onNewDelivery, onSettings, startPanel = null
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <div style={{ width:32, height:32, borderRadius:'50%', background:'#1a3a5a', border:'1px solid rgba(255,255,255,.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'white', fontFamily:"'DM Sans',system-ui,sans-serif" }}>{order.av}</div>
                 <div>
+                  <p style={{ margin:'0 0 2px', fontSize:9, color:'rgba(255,255,255,.25)', letterSpacing:'0.1em', fontFamily:"'DM Sans',system-ui,sans-serif" }}>CLIENT</p>
+                  <p style={{ margin:'0 0 2px', fontSize:12, fontWeight:600, color:'rgba(255,255,255,.85)', fontFamily:"'DM Sans',system-ui,sans-serif" }}>{order.client}</p>
                   <p style={{ margin:'0 0 2px', fontSize:9, color:'rgba(255,255,255,.25)', letterSpacing:'0.1em', fontFamily:"'DM Sans',system-ui,sans-serif" }}>YOUR COURIER</p>
                   <p style={{ margin:0, fontSize:12, fontWeight:600, color:'white', fontFamily:"'DM Sans',system-ui,sans-serif" }}>{order.courier}</p>
                 </div>
@@ -157,6 +233,13 @@ export default function PageTrack({ onNewDelivery, onSettings, startPanel = null
                 View Deliverer History
               </button>
             </div>
+          </div>
+        )}
+        {!loadingOrder && !order && (
+          <div style={{ position: 'absolute', left: 16, bottom: 16, zIndex: 999, background: 'rgba(9,22,42,.96)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 14, padding: 14 }}>
+            <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,.75)', fontFamily: "'DM Sans',system-ui,sans-serif" }}>
+              No active delivery to track yet.
+            </p>
           </div>
         )}
       </div>

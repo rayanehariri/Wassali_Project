@@ -1,17 +1,13 @@
 // DelivererSideBar.jsx
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarProvider,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -34,7 +30,7 @@ const navItems = [
   { label: "Support",   icon: Headphones,      id: "support",   path: "/deliverer-dashboard/support"   },
 ];
 
-export default function DelivererSideBar({ currentUser, onLogout, onClose, isMobile }) {
+export default function DelivererSideBar({ onLogout, onClose, isMobile }) {
   const navigate  = useNavigate();
   const { pathname } = useLocation();
 
@@ -89,7 +85,7 @@ export default function DelivererSideBar({ currentUser, onLogout, onClose, isMob
       </SidebarHeader>
 
       {/* ── Nav items ── */}
-      <SidebarContent className="!px-3">
+      <SidebarContent className="!px-3 !flex !flex-col !flex-1">
         <SidebarMenu className="!gap-0.5">
           {navItems.map(({ label, icon: Icon, id, path }) => {
             const isActive = activeItem?.id === id;
@@ -118,9 +114,10 @@ export default function DelivererSideBar({ currentUser, onLogout, onClose, isMob
           })}
         </SidebarMenu>
 
-        {/* ── Divider + Logout ── */}
-        <SidebarSeparator className="!my-2 !bg-[#1a2744]" />
+      </SidebarContent>
 
+      <div className="!px-3 !pb-4 !pt-2 !mt-auto">
+        <SidebarSeparator className="!mb-2 !bg-[#1a2744]" />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -132,7 +129,7 @@ export default function DelivererSideBar({ currentUser, onLogout, onClose, isMob
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-      </SidebarContent>
+      </div>
 
     </div>
   );

@@ -98,17 +98,76 @@ function WhyChoose() {
 
 function Calculator() {
   const [distance, setDistance] = useState(5);
-  const [size, setSize]         = useState(500);
-  const [price, setPrice]       = useState(null);
+  const [weight, setWeight] = useState(3);
+  const [urgency, setUrgency] = useState("standard");
+  const [zone, setZone] = useState("same");
+  const [estimate, setEstimate] = useState(null);
 
-  function calculatePrice() {
-    setPrice(parseInt(size) + distance * 50);
+  function roundTo10(value) {
+    return Math.round(value / 10) * 10;
   }
+
+ function calculatePrice() {
+  const safeDistance = Math.max(1, Number(distance) || 1);
+  const safeWeight   = Math.max(0.5, Number(weight) || 0.5);
+
+  const baseFee = 120;
+
+  // تسعير تدريجي — كلما زادت المسافة، قل سعر الكيلومتر
+  let distanceFee = 0;
+  if (safeDistance <= 10) {
+    distanceFee = safeDistance * 28;
+  } else if (safeDistance <= 50) {
+    distanceFee = (10 * 28) + ((safeDistance - 10) * 18);
+  } else if (safeDistance <= 150) {
+    distanceFee = (10 * 28) + (40 * 18) + ((safeDistance - 50) * 12);
+  } else {
+    distanceFee = (10 * 28) + (40 * 18) + (100 * 12) + ((safeDistance - 150) * 8);
+  }
+
+  // وزن: مجاني حتى 5 كغ
+  const weightFee = safeWeight <= 5 ? 0 : (safeWeight - 5) * 15;
+
+  // منطقة
+  const zoneFee = zone === 'cross' ? 60 : 0;
+
+  // تخفيض القرب فقط للمسافات القصيرة
+  const affordabilityDiscount =
+    safeDistance <= 3 ? 50 :
+    safeDistance <= 6 ? 30 : 0;
+
+  // Express فقط على الأساس والمسافة
+  const urgencyFee =
+    urgency === 'express'
+      ? (baseFee + distanceFee) * 0.12
+      : 0;
+
+  const subtotal   = baseFee + distanceFee + weightFee
+                   + zoneFee - affordabilityDiscount + urgencyFee;
+  const serviceFee = Math.max(25, subtotal * 0.03);
+
+  const final = roundTo10(subtotal + serviceFee);
+  const min   = roundTo10(final * 0.94);
+  const max   = roundTo10(final * 1.06);
+
+  setEstimate({
+    min, max, average: final,
+    breakdown: {
+      baseFee:               roundTo10(baseFee),
+      distanceFee:           roundTo10(distanceFee),
+      weightFee:             roundTo10(weightFee),
+      zoneFee:               roundTo10(zoneFee),
+      affordabilityDiscount: roundTo10(affordabilityDiscount),
+      urgencyFee:            roundTo10(urgencyFee),
+      serviceFee:            roundTo10(serviceFee),
+    },
+  });
+}
 
   return (
     <section className="calculator">
       <h2>Calculate Your Delivery Cost</h2>
-      <p className="subtitle">Get an instant price estimate</p>
+      <p className="subtitle">Transparent and affordable pricing powered for Algerian cities</p>
       <div className="calculator-box">
         <div className="form-group">
           <label>Distance (km)</label>
@@ -116,20 +175,43 @@ function Calculator() {
             onChange={function (e) { setDistance(e.target.value); }} placeholder="Enter distance" />
         </div>
         <div className="form-group">
-          <label>Package Size</label>
-          <select value={size} onChange={function (e) { setSize(e.target.value); }}>
-            <option value="500">Small (&lt; 5kg) - Base 500 DA</option>
-            <option value="800">Medium (5-15kg) - Base 800 DA</option>
-            <option value="1200">Large (&gt; 15kg) - Base 1200 DA</option>
+          <label>Weight (kg)</label>
+          <input type="number" value={weight} min="0.5" max="40" step="0.5"
+            onChange={function (e) { setWeight(e.target.value); }} placeholder="Enter weight" />
+        </div>
+        <div className="form-group">
+          <label>Urgency</label>
+          <select value={urgency} onChange={function (e) { setUrgency(e.target.value); }}>
+            <option value="standard">Standard (best price)</option>
+            <option value="express">Express (+12%)</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Delivery Zone</label>
+          <select value={zone} onChange={function (e) { setZone(e.target.value); }}>
+            <option value="same">Same district</option>
+            <option value="cross">Cross-district</option>
           </select>
         </div>
         <button className="btn-primary" style={{ width: '100%' }} onClick={calculatePrice}>
-          Calculate Price
+          Calculate Smart Estimate
         </button>
-        {price !== null && (
+        {estimate !== null && (
           <div className="price-result">
-            <div className="price-amount">{price} DA</div>
-            <div className="price-label">Estimated delivery cost</div>
+            <div className="price-amount">{estimate.min} - {estimate.max} DA</div>
+            <div className="price-label">Estimated delivery range (average {estimate.average} DA)</div>
+            <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)", textAlign: "left" }}>
+              <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700 }}>Price Breakdown</p>
+              <p style={{ margin: "2px 0", fontSize: 12 }}>Base fee: {estimate.breakdown.baseFee} DA</p>
+              <p style={{ margin: "2px 0", fontSize: 12 }}>Distance fee: {estimate.breakdown.distanceFee} DA</p>
+              <p style={{ margin: "2px 0", fontSize: 12 }}>Weight fee: {estimate.breakdown.weightFee} DA</p>
+              <p style={{ margin: "2px 0", fontSize: 12 }}>Zone fee: {estimate.breakdown.zoneFee} DA</p>
+              <p style={{ margin: "2px 0", fontSize: 12, color: "#22c55e" }}>Affordability discount: -{estimate.breakdown.affordabilityDiscount} DA</p>
+              <p style={{ margin: "2px 0", fontSize: 12 }}>Service fee: {estimate.breakdown.serviceFee} DA</p>
+            </div>
+            <p style={{ marginTop: 10, fontSize: 12, color: "var(--text-secondary)" }}>
+              No hidden fees. Final price is confirmed before you place the order.
+            </p>
           </div>
         )}
       </div>

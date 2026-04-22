@@ -7,12 +7,11 @@ import { MapContainer, TileLayer } from "react-leaflet";
 import {
   MapPin, Bell, CheckCircle2, Clock, TrendingUp,
   Navigation, Package, AlertTriangle, ExternalLink,
-  Hourglass, ArrowRight, Sparkles, Users,
+  Hourglass, ArrowRight,
 } from "lucide-react";
 import {
   getSchedule, getIncomingRequests, acceptRequest, rejectRequest,
   getDailySummary, getActiveTask, viewNavigationDetails, switchScheduleTab, getAwaitingClientApprovals,
-  simulateClientConfirmRequest,
 } from "./FakeApi";
 
 function RequestCard({ request, onAccept, onReject, accepting, rejecting }) {
@@ -140,7 +139,7 @@ function formatWaitingSince(iso) {
 }
 
 /** Polished “waiting for client” queue — matches dashboard dark theme. */
-function AwaitingClientQueue({ items, onSimulateConfirm, simConfirmingId }) {
+function AwaitingClientQueue({ items }) {
   if (items.length === 0) return null;
 
   return (
@@ -211,7 +210,7 @@ function AwaitingClientQueue({ items, onSimulateConfirm, simConfirmingId }) {
             </span>
           </div>
           <p style={{ margin: 0, fontSize: 12, color: "#94a3b8", lineHeight: 1.45 }}>
-            You&apos;re in the queue. The client is reviewing couriers who accepted this request. Navigation unlocks once you&apos;re selected.
+            The client chooses who takes this job in their app. You&apos;ll see navigation here once they confirm you. If they pick someone else, this request will drop from your list automatically.
           </p>
         </div>
       </div>
@@ -299,65 +298,6 @@ function AwaitingClientQueue({ items, onSimulateConfirm, simConfirmingId }) {
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    marginTop: 12,
-                    paddingTop: 12,
-                    borderTop: "1px solid rgba(255,255,255,0.06)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <Users size={14} color="#64748b" style={{ flexShrink: 0 }} />
-                  <p style={{ margin: 0, fontSize: 11, color: "#64748b", lineHeight: 1.4, flex: 1 }}>
-                    Other couriers may have accepted too. Only the client can confirm who takes this job.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => onSimulateConfirm(req.id)}
-                  disabled={simConfirmingId === req.id}
-                  style={{
-                    width: "100%",
-                    marginTop: 12,
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(59,130,246,0.35)",
-                    background: "linear-gradient(180deg, rgba(37,99,235,0.15), rgba(37,99,235,0.06))",
-                    color: "#93c5fd",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: "0.02em",
-                    cursor: simConfirmingId === req.id ? "wait" : "pointer",
-                    opacity: simConfirmingId === req.id ? 0.75 : 1,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    transition: "border-color 0.15s, background 0.15s",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (simConfirmingId === req.id) return;
-                    e.currentTarget.style.borderColor = "rgba(59,130,246,0.55)";
-                    e.currentTarget.style.background = "linear-gradient(180deg, rgba(37,99,235,0.22), rgba(37,99,235,0.1))";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "rgba(59,130,246,0.35)";
-                    e.currentTarget.style.background = "linear-gradient(180deg, rgba(37,99,235,0.15), rgba(37,99,235,0.06))";
-                  }}
-                >
-                  {simConfirmingId === req.id ? (
-                    <span style={{ width: 14, height: 14, border: "2px solid rgba(147,197,253,0.35)", borderTopColor: "#93c5fd", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
-                  ) : (
-                    <Sparkles size={14} color="#93c5fd" />
-                  )}
-                  {simConfirmingId === req.id ? "Processing…" : "Preview: client confirms you" }
-                </button>
-                <p style={{ margin: "8px 0 0", fontSize: 10, color: "#475569", textAlign: "center", lineHeight: 1.35 }}>
-                  Dev-only: simulates the client app. Remove when the API is live.
-                </p>
               </div>
             </div>
           );
@@ -378,7 +318,6 @@ export default function ActiveSchedulePage() {
   const [acceptingId, setAcceptingId] = useState(null);
   const [rejectingId, setRejectingId] = useState(null);
   const [navLoading,  setNavLoading]  = useState(false);
-  const [simConfirmingId, setSimConfirmingId] = useState(null);
   const [isMobile,    setIsMobile]    = useState(false);
   const navigate = useNavigate();
 
@@ -403,6 +342,30 @@ export default function ActiveSchedulePage() {
     fetchAll();
   }, []);
 
+  // Keep requests/task fresh so new client requests appear without reload.
+  useEffect(() => {
+    let alive = true;
+    const timer = setInterval(async () => {
+      try {
+        const [reqs, pending, task] = await Promise.all([
+          getIncomingRequests(),
+          getAwaitingClientApprovals(),
+          getActiveTask(),
+        ]);
+        if (!alive) return;
+        setRequests(reqs);
+        setAwaitingClient(pending);
+        setActiveTask(task);
+      } catch {
+        // keep UI steady, next poll retries
+      }
+    }, 3000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+
   async function handleTabSwitch(tab) {
     setActiveTab(tab);
     const updated = await switchScheduleTab(tab);
@@ -413,6 +376,10 @@ export default function ActiveSchedulePage() {
     setAcceptingId(id);
     try {
       const result = await acceptRequest(id);
+      if (result?.success === false) {
+        window.alert(result?.message || "Could not accept this request.");
+        return;
+      }
       setRequests(prev => prev.filter(r => r.id !== id));
       if (result?.phase === "awaiting_client_selection" && result?.request) {
         setAwaitingClient(prev => [result.request, ...prev]);
@@ -435,25 +402,6 @@ export default function ActiveSchedulePage() {
       await rejectRequest(id);
       setRequests(prev => prev.filter(r => r.id !== id));
     } finally { setRejectingId(null); }
-  }
-
-  /** FAKE: simulates the client choosing this deliverer (replace with real API / push later). */
-  async function handleSimulateClientConfirm(requestId) {
-    setSimConfirmingId(requestId);
-    try {
-      const result = await simulateClientConfirmRequest(requestId);
-      if (result?.success && result.orderId) {
-        setAwaitingClient((prev) => prev.filter((r) => r.id !== requestId));
-        setActiveTask({
-          orderId: result.orderId,
-          status: "Awaiting Pickup",
-          acceptedAgo: "just now",
-          pickupAt: result.pickupAt ?? "Pickup point assigned",
-        });
-      }
-    } finally {
-      setSimConfirmingId(null);
-    }
   }
 
   async function handleViewNavigation() {
@@ -512,11 +460,7 @@ export default function ActiveSchedulePage() {
         ))}
       </div>
 
-      <AwaitingClientQueue
-        items={awaitingClient}
-        onSimulateConfirm={handleSimulateClientConfirm}
-        simConfirmingId={simConfirmingId}
-      />
+      <AwaitingClientQueue items={awaitingClient} />
 
       {/* Active Task */}
       {activeTask && (
@@ -608,7 +552,11 @@ export default function ActiveSchedulePage() {
           {requests.length === 0 ? (
             <div style={{ textAlign: "center", padding: "30px 20px", color: "#334155" }}>
               <Bell size={28} style={{ opacity: 0.3, margin: "0 auto 10px" }} />
-              <p style={{ fontSize: 14, margin: 0 }}>No incoming requests</p>
+              <p style={{ fontSize: 14, margin: 0 }}>
+                {activeTask
+                  ? "You have an active delivery. Finish it before accepting new requests."
+                  : "No incoming requests"}
+              </p>
             </div>
           ) : requests.map(req => (
             <RequestCard key={req.id} request={req} onAccept={handleAccept} onReject={handleReject} accepting={acceptingId === req.id} rejecting={rejectingId === req.id} />
@@ -635,7 +583,13 @@ export default function ActiveSchedulePage() {
             {requests.length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px 20px", color: "#334155" }}>
                 <Bell size={32} style={{ opacity: 0.3, margin: "0 auto 12px" }} />
-                <p style={{ fontSize: 14, margin: 0 }}>{awaitingClient.length > 0 ? "No new requests. Waiting for client decisions." : "No incoming requests right now"}</p>
+                <p style={{ fontSize: 14, margin: 0 }}>
+                  {activeTask
+                    ? "You have an active delivery. Finish it before accepting new requests."
+                    : awaitingClient.length > 0
+                    ? "No new requests. Waiting for client decisions."
+                    : "No incoming requests right now"}
+                </p>
               </div>
             ) : requests.map(req => (
               <RequestCard key={req.id} request={req} onAccept={handleAccept} onReject={handleReject} accepting={acceptingId === req.id} rejecting={rejectingId === req.id} />

@@ -155,7 +155,16 @@ function buildClientSearchResults(query, setActive, addToast) {
   return out.slice(0, 12);
 }
 
-export function TopBar({ placeholder = 'Search deliveries, tracking IDs...', onSettings, setActive, addToast, currentUser }) {
+export function TopBar({
+  placeholder = 'Search deliveries, tracking IDs...',
+  onSettings,
+  setActive,
+  addToast,
+  currentUser,
+  showOnline = false,
+  isOnline = true,
+  onToggleOnline,
+}) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -225,6 +234,38 @@ export function TopBar({ placeholder = 'Search deliveries, tracking IDs...', onS
         )}
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:14, marginLeft:'auto' }}>
+        {showOnline && (
+          <button
+            type="button"
+            onClick={() => onToggleOnline?.(!isOnline)}
+            className="cd-icon-btn"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 10px',
+              borderRadius: 10,
+              background: 'transparent',
+              border: '1px solid #1e2d3d',
+              color: isOnline ? '#10b981' : '#64748b',
+              cursor: 'pointer',
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: isOnline ? '#10b981' : '#64748b',
+                boxShadow: isOnline ? '0 0 0 3px rgba(16,185,129,0.2)' : 'none',
+                flexShrink: 0,
+              }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 600 }}>
+              {isOnline ? 'Online' : 'Offline'}
+            </span>
+          </button>
+        )}
         <button type="button" className="cd-icon-btn" style={{ position:'relative', width:34, height:34, borderRadius:9, display:'flex', alignItems:'center', justifyContent:'center', background:'#112040', border:'1px solid rgba(255,255,255,.08)', color:'rgba(255,255,255,.45)', cursor:'pointer' }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           <span style={{ position:'absolute', top:5, right:5, width:6, height:6, borderRadius:'50%', background:'#3b82f6', border:'1px solid #0b1e38' }}/>

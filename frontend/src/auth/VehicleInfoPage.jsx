@@ -1,11 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import LogoIcon from './LogoIcon';
-
-const API = axios.create({
-  baseURL: 'http://127.0.0.1:5000/api',
-  headers: { 'Content-Type': 'application/json' },
-});
+import { http } from '../api/http';
 
 // ── VEHICLE TYPES ─────────────────────────────────────────
 const VEHICLE_TYPES = [
@@ -93,7 +89,7 @@ function FileUploadBox({ label, hint, file, onFileChange, error }) {
                   '!border-blue-500/30 !bg-white/[.02] hover:!border-blue-500/60 hover:!bg-blue-500/[.04]'
         }`}
       >
-        <input ref={inputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="!hidden" onChange={e => onFileChange(e.target.files[0])} />
+        <input ref={inputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="!hidden" onChange={e => onFileChange(e.target.files[0])} />
         {file ? (
           <>
             <div className="!w-12 !h-12 !rounded-full !bg-green-500/15 !flex !items-center !justify-center !mx-auto !mb-3">
@@ -118,14 +114,18 @@ function FileUploadBox({ label, hint, file, onFileChange, error }) {
 }
 
 // ── TOP BAR ──────────────────────────────────────────────
-function TopBar({ currentUser, statusColor = '#94a3b8', statusLabel = 'New Partner' }) {
+function TopBar({ currentUser, statusColor = '#94a3b8', statusLabel = 'New Partner', onLogoClick }) {
   return (
     <div className="!flex !items-center !justify-between !px-8 !py-4 !border-b !border-white/[.06] !bg-[rgba(11,25,41,0.95)] !backdrop-blur-xl !sticky !top-0 !z-10">
-      <div className="!flex !items-center !gap-2">
+      <button
+        type="button"
+        onClick={onLogoClick}
+        className="!flex !items-center !gap-2 !bg-transparent !border-0 !text-inherit !cursor-pointer"
+      >
         <LogoIcon size={22} color="#3b82f6" />
         <span className="!text-[17px] !font-bold !tracking-tight">Wassali</span>
         <span className="!text-[11px] !font-semibold !text-blue-400 !bg-blue-500/10 !border !border-blue-500/20 !px-2 !py-0.5 !rounded-full">Drive</span>
-      </div>
+      </button>
       <div className="!flex !items-center !gap-2.5 !bg-white/[.04] !border !border-white/[.07] !rounded-xl !px-3 !py-2">
         <div
           className="!w-8 !h-8 !rounded-full !bg-blue-500/15 !border !flex !items-center !justify-center !font-bold !text-[13px] !text-blue-300"
@@ -237,6 +237,7 @@ function SubmissionSummary({ variant = 'submitted' }) {
 // MAIN: VehicleInfoPage  (Step 1 → 2 → 3 → submit)
 // ═══════════════════════════════════════════════════════════
 function VehicleInfoPage({ currentUser, setCurrentUser, addToast, onSubmitSuccess }) {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
 
   const [vehicleType,  setVehicleType]  = useState('car');
@@ -284,15 +285,35 @@ function VehicleInfoPage({ currentUser, setCurrentUser, addToast, onSubmitSucces
   async function handleSubmit() {
     setSubmitting(true);
     try {
-      // ── Call the backend to mark onboarding as done and set status → pending ──
-      // Replace currentUser.id with whatever field holds the user's backend ID
       const userId = currentUser?.id || currentUser?._id;
-      if (userId) {
-        await API.post(`/auth/onboarding/${userId}/`);
+      if (!userId) {
+        addToast?.('error', 'Submission failed', 'Missing user session. Please sign in again.');
+        return;
       }
 
-      // In a real app you'd also upload the files to your storage endpoint here.
-      // e.g. await uploadDocuments(userId, { regFile, licenseFile, idFile });
+      await http.post(`/auth/onboarding/${userId}/`);
+
+      const fd = new FormData();
+      fd.append('registration', regFile);
+      fd.append('license', licenseFile);
+      fd.append('idCard', idFile);
+      const upRes = await http.post('/verification/upload', fd);
+      const up = upRes.data || {};
+      if (!up.success) {
+        throw new Error(up.message || 'Upload failed');
+      }
+
+      await http.post('/verification/submit', {
+        vehicleType,
+        makeModel,
+        licensePlate,
+        idCardName: idFile?.name || 'id-card',
+        licenseName: licenseFile?.name || 'license',
+        registrationName: regFile?.name || 'registration',
+        idCardPath: up.idCard?.path,
+        licensePath: up.license?.path,
+        registrationPath: up.registration?.path,
+      });
 
       addToast?.('success', 'Application submitted!', 'Your account is now under review (24–48 h).');
 
@@ -300,10 +321,7 @@ function VehicleInfoPage({ currentUser, setCurrentUser, addToast, onSubmitSucces
       onSubmitSuccess?.();
     } catch (err) {
       console.error('Onboarding submission error:', err);
-      // Even if the API call fails (e.g. offline), we still update local state
-      // so the UI flow continues. The backend can be synced later.
-      addToast?.('warning', 'Application submitted!', 'Your data was saved locally. We\'ll sync when back online.');
-      onSubmitSuccess?.();
+      addToast?.('error', 'Submission failed', 'We could not submit your verification. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -313,7 +331,7 @@ function VehicleInfoPage({ currentUser, setCurrentUser, addToast, onSubmitSucces
 
   return (
     <div className="!min-h-screen !bg-[#0b1929] !text-white">
-      <TopBar currentUser={currentUser} />
+      <TopBar currentUser={currentUser} onLogoClick={() => navigate('/')} />
 
       <div className="!flex !justify-center !px-5 !py-8 !pb-16">
         <div className="!w-full !max-w-[720px]">
@@ -376,7 +394,7 @@ function VehicleInfoPage({ currentUser, setCurrentUser, addToast, onSubmitSucces
                 />
               </div>
 
-              <NavRow onBack={() => window.history.back()} onNext={handleNext} />
+              <NavRow onBack={() => navigate('/')} onNext={handleNext} />
             </Card>
           )}
 
@@ -493,6 +511,7 @@ function VehicleInfoPage({ currentUser, setCurrentUser, addToast, onSubmitSucces
 // When approved, calls onApproved() which transitions to /verified.
 // ═══════════════════════════════════════════════════════════
 export function UnderReviewPage({ currentUser, onApproved }) {
+  const navigate = useNavigate();
   const [checking, setChecking] = useState(false);
 
   useEffect(() => {
@@ -503,8 +522,8 @@ export function UnderReviewPage({ currentUser, onApproved }) {
     async function checkStatus() {
       setChecking(true);
       try {
-        const res = await API.get(`/auth/status/${userId}/`);
-        if (res.data?.status === 'active') {
+        const res = await http.get(`/auth/status/${userId}/`);
+        if ((res?.data?.data?.status || '').toLowerCase() === 'active') {
           // Admin has approved — trigger the transition to /verified
           onApproved?.();
         }
@@ -524,7 +543,7 @@ export function UnderReviewPage({ currentUser, onApproved }) {
 
   return (
     <div className="!min-h-screen !bg-[#0b1929] !text-white">
-      <TopBar currentUser={currentUser} statusColor="#f59e0b" statusLabel="Pending Review" />
+      <TopBar currentUser={currentUser} statusColor="#f59e0b" statusLabel="Pending Review" onLogoClick={() => navigate('/')} />
 
       <div className="!flex !justify-center !px-5 !py-8 !pb-16">
         <div className="!w-full !max-w-[860px]">
@@ -605,9 +624,10 @@ export function UnderReviewPage({ currentUser, onApproved }) {
 // so future logins go directly to the dashboard.
 // ═══════════════════════════════════════════════════════════
 export function VerifiedPage({ currentUser, onGetStarted }) {
+  const navigate = useNavigate();
   return (
     <div className="!min-h-screen !bg-[#0b1929] !text-white">
-      <TopBar currentUser={currentUser} statusColor="#4ade80" statusLabel="Verified" />
+      <TopBar currentUser={currentUser} statusColor="#4ade80" statusLabel="Verified" onLogoClick={() => navigate('/')} />
 
       <div className="!flex !justify-center !px-5 !py-8 !pb-16">
         <div className="!w-full !max-w-[860px]">
