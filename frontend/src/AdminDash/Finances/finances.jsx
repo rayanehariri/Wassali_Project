@@ -16,6 +16,7 @@ import {
   Table, TableBody, TableCell,
   TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { http } from "../../api/http";
 
 // ── Breakpoint hook ───────────────────────────────────────────
 function useBreakpoint() {
@@ -46,35 +47,6 @@ const REVENUE_DATA = [
   { name: "Jul 10", value: 7800  },
   { name: "Jul 15", value: 9200  },
   { name: "Jul 20", value: 10400 },
-];
-
-const TRANSACTIONS = [
-  { id: "#ORD-9281", date: "Jun 24, 2023", deliverer: "Alex M.",    delivererAvatar: "AM", amount: "$45.00",  status: "success"  },
-  { id: "#ORD-9280", date: "Jun 24, 2023", deliverer: "Sarah J.",   delivererAvatar: "SJ", amount: "$120.50", status: "pending"  },
-  { id: "#ORD-9279", date: "Jun 23, 2023", deliverer: "Emily R.",   delivererAvatar: "ER", amount: "$32.00",  status: "refunded" },
-  { id: "#ORD-9278", date: "Jun 23, 2023", deliverer: "Michael T.", delivererAvatar: "MT", amount: "$89.00",  status: "success"  },
-];
-
-const PAYOUTS = [
-  {
-    name: "John D.", avatar: "JD", wallet: "$450.00",
-    bank: "BEA Bank", holder: "John Doe", iban: "**** **** **** 4829",
-    history: [
-      { id: "#ORD-9285", date: "Jun 25", commission: "+$12.50" },
-      { id: "#ORD-9282", date: "Jun 24", commission: "-$8.00"  },
-      { id: "#ORD-9275", date: "Jun 23", commission: "+$15.20" },
-      { id: "#ORD-9270", date: "Jun 22", commission: "+$9.50"  },
-      { id: "#ORD-9268", date: "Jun 22", commission: "+$11.00" },
-    ],
-  },
-  {
-    name: "Lisa K.", avatar: "LK", wallet: "$1,200.00",
-    bank: "CIB Algeria", holder: "Lisa Kamel", iban: "**** **** **** 7741",
-    history: [
-      { id: "#ORD-9284", date: "Jun 25", commission: "+$45.00" },
-      { id: "#ORD-9281", date: "Jun 24", commission: "+$78.00" },
-    ],
-  },
 ];
 
 const GAINS = [
@@ -245,7 +217,7 @@ function PayoutModal({ payout, onClose, onConfirm }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {payout.history.map((h) => (
+                  {(payout.history || []).map((h) => (
                     <TableRow key={h.id} style={{ borderColor: "rgba(255,255,255,0.04)" }}>
                       <TableCell style={{ color: "#60a5fa", fontFamily: "monospace", fontSize: "12px" }}>{h.id}</TableCell>
                       <TableCell style={{ color: "rgba(255,255,255,0.45)", fontSize: "12px" }}>{h.date}</TableCell>
@@ -342,6 +314,29 @@ export default function FinancePage({ addToast }) {
   const [chartRange, setChartRange] = useState("Monthly");
   const { isMobile, isTablet }      = useBreakpoint();
   const isNarrow = isMobile || isTablet;
+  const [transactions, setTransactions] = useState([]);
+  const [payouts, setPayouts] = useState([]);
+  const [finSummary, setFinSummary] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [txRes, payRes, sumRes] = await Promise.all([
+          http.get("/admin/finance/recent-transactions"),
+          http.get("/admin/finance/deliverer-payouts"),
+          http.get("/admin/finance/summary"),
+        ]);
+        if (!alive) return;
+        setTransactions(txRes?.data?.transactions ?? []);
+        setPayouts(payRes?.data?.payouts ?? []);
+        setFinSummary(sumRes?.data ?? null);
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   return (
     <div className="flex flex-col w-full">
@@ -373,10 +368,10 @@ export default function FinancePage({ addToast }) {
           gridTemplateColumns: isMobile ? "1fr 1fr" : isTablet ? "1fr 1fr" : "repeat(4, 1fr)",
           gap: "12px",
         }}>
-          <StatCard label="Total Revenue"     value="$124,592" sub="↗ 12.5% vs last month" color="#60a5fa" glowColor="rgba(59,130,246,0.15)"  icon={DollarSign} />
-          <StatCard label="Avg. Order Value"  value="$42.50"   sub="↗ 2.1% vs last month"  color="#a78bfa" glowColor="rgba(167,139,250,0.15)" icon={BarChart3}  />
-          <StatCard label="Pending Payouts"   value="$4,200"   sub="8 deliverers awaiting" color="#f59e0b" glowColor="rgba(245,158,11,0.15)"  icon={Clock}      />
-          <StatCard label="Commission Earned" value="$12,450"  sub="↗ 5.4% profit margin"  color="#4ade80" glowColor="rgba(74,222,128,0.15)"  icon={TrendingUp} />
+          <StatCard label="Total Revenue"     value={finSummary?.totalRevenue ?? "—"} sub="Delivered orders (all time)" color="#60a5fa" glowColor="rgba(59,130,246,0.15)"  icon={DollarSign} />
+          <StatCard label="Avg. Order Value"  value={finSummary?.avgOrder ?? "—"}   sub="Mean ticket on completed jobs"  color="#a78bfa" glowColor="rgba(167,139,250,0.15)" icon={BarChart3}  />
+          <StatCard label="Pending Payouts"   value={finSummary?.pendingPayouts ?? "—"}   sub={`${finSummary?.pendingDeliverers ?? "—"} deliverers on file`} color="#f59e0b" glowColor="rgba(245,158,11,0.15)"  icon={Clock}      />
+          <StatCard label="Commission Earned" value={finSummary?.commissionEarned ?? "—"}  sub="Estimated platform share (10%)"  color="#4ade80" glowColor="rgba(74,222,128,0.15)"  icon={TrendingUp} />
         </div>
 
         {/* Revenue Chart */}
@@ -458,24 +453,32 @@ export default function FinancePage({ addToast }) {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {TRANSACTIONS.map((tx) => (
-                        <TableRow key={tx.id} style={{ borderColor: "#1e2d3d" }} className="hover:!bg-white/5">
-                          <TableCell style={{ color: "#60a5fa", fontFamily: "monospace", fontSize: "12px" }}>{tx.id}</TableCell>
-                          <TableCell style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>{tx.date}</TableCell>
-                          <TableCell className="!px-3 !py-3">
-                            <div className="flex items-center gap-2">
-                              <Avatar className="h-7 w-7">
-                                <AvatarFallback style={{ background: "linear-gradient(135deg,#3b82f6,#8b5cf6)" }} className="!text-white !text-[10px] !font-bold">
-                                  {tx.delivererAvatar}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="text-white text-[13px]">{tx.deliverer}</span>
-                            </div>
+                      {transactions.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} style={{ color: "rgba(255,255,255,0.45)", fontSize: "12px", textAlign: "center", padding: "20px" }}>
+                            No transactions yet.
                           </TableCell>
-                          <TableCell className="!text-white !font-semibold !text-[13px]">{tx.amount}</TableCell>
-                          <TableCell><StatusBadge status={tx.status} /></TableCell>
                         </TableRow>
-                      ))}
+                      ) : (
+                        transactions.map((tx) => (
+                          <TableRow key={tx.id} style={{ borderColor: "#1e2d3d" }} className="hover:!bg-white/5">
+                            <TableCell style={{ color: "#60a5fa", fontFamily: "monospace", fontSize: "12px" }}>{tx.id}</TableCell>
+                            <TableCell style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>{tx.date}</TableCell>
+                            <TableCell className="!px-3 !py-3">
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-7 w-7">
+                                  <AvatarFallback style={{ background: "linear-gradient(135deg,#3b82f6,#8b5cf6)" }} className="!text-white !text-[10px] !font-bold">
+                                    {tx.delivererAvatar}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-white text-[13px]">{tx.deliverer}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="!text-white !font-semibold !text-[13px]">{tx.amount}</TableCell>
+                            <TableCell><StatusBadge status={tx.status} /></TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -491,8 +494,8 @@ export default function FinancePage({ addToast }) {
               <CardContent style={{ padding: "20px" }}>
                 <h3 className="text-white font-bold text-[14px] mb-4">Payout Management</h3>
                 <div className="flex flex-col gap-3">
-                  {PAYOUTS.map((p) => (
-                    <div key={p.name} style={{
+                  {payouts.map((p) => (
+                    <div key={p.userId || p.name} style={{
                       display: "flex", alignItems: "center", gap: "10px",
                       background: "rgba(255,255,255,0.02)",
                       border: "1px solid rgba(255,255,255,0.05)",

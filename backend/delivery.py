@@ -113,14 +113,21 @@ class Delivery:
                 "message": "You can only cancel your own deliveries",
             }
 
-        if delivery["status"] != DeliveryStatus.PENDING.value:
+        if delivery["status"] not in [DeliveryStatus.PENDING.value, DeliveryStatus.ACCEPTED.value]:
             return {
                 "success": False,
-                "message": "Only pending deliveries can be cancelled",
+                "message": "Only awaiting pickup deliveries can be cancelled",
             }
 
         deliveries_collection.update_one(
-            {"_id": delivery_id}, {"$set": {"status": DeliveryStatus.CANCELLED.value}}
+            {"_id": delivery_id},
+            {
+                "$set": {
+                    "status": DeliveryStatus.CANCELLED.value,
+                    "cancelled_by": "client",
+                    "cancelled_by_id": client_id,
+                }
+            },
         )
         return {"success": True, "message": "Delivery cancelled successfully"}
 
@@ -151,18 +158,56 @@ class Delivery:
 
     @staticmethod
     def mark_as_delivered(delivery_id: str) -> dict:
-        """Mark an accepted delivery as delivered."""
+        """Mark an in-transit delivery as delivered."""
         delivery = deliveries_collection.find_one({"_id": delivery_id})
         if not delivery:
             return {"success": False, "message": "Delivery not found"}
 
-        if delivery["status"] != DeliveryStatus.ACCEPTED.value:
-            return {"success": False, "message": "Delivery is not accepted"}
+        if delivery["status"] != DeliveryStatus.IN_TRANSIT.value:
+            return {"success": False, "message": "Delivery must be in transit first"}
 
         deliveries_collection.find_one_and_update(
             {"_id": delivery_id}, {"$set": {"status": DeliveryStatus.DELIVERED.value}}
         )
         return {"success": True, "message": "Delivery marked as delivered"}
+
+    @staticmethod
+    def mark_as_in_transit(delivery_id: str, deliverer_id: str) -> dict:
+        """Move an accepted delivery (awaiting pickup) to in_transit."""
+        delivery = deliveries_collection.find_one({"_id": delivery_id})
+        if not delivery:
+            return {"success": False, "message": "Delivery not found"}
+        if delivery.get("deliverer_id") != deliverer_id:
+            return {"success": False, "message": "Not assigned to this deliverer"}
+        if delivery["status"] != DeliveryStatus.ACCEPTED.value:
+            return {"success": False, "message": "Only awaiting pickup deliveries can start transit"}
+        deliveries_collection.update_one(
+            {"_id": delivery_id},
+            {"$set": {"status": DeliveryStatus.IN_TRANSIT.value}},
+        )
+        return {"success": True, "message": "Delivery is now in transit"}
+
+    @staticmethod
+    def cancel_by_deliverer(delivery_id: str, deliverer_id: str) -> dict:
+        """Deliverer can cancel only while awaiting pickup (accepted)."""
+        delivery = deliveries_collection.find_one({"_id": delivery_id})
+        if not delivery:
+            return {"success": False, "message": "Delivery not found"}
+        if delivery.get("deliverer_id") != deliverer_id:
+            return {"success": False, "message": "You can only cancel your assigned delivery"}
+        if delivery.get("status") != DeliveryStatus.ACCEPTED.value:
+            return {"success": False, "message": "You can cancel only while awaiting pickup"}
+        deliveries_collection.update_one(
+            {"_id": delivery_id},
+            {
+                "$set": {
+                    "status": DeliveryStatus.CANCELLED.value,
+                    "cancelled_by": "deliverer",
+                    "cancelled_by_id": deliverer_id,
+                }
+            },
+        )
+        return {"success": True, "message": "Delivery cancelled by deliverer"}
 
     @staticmethod
     def track(delivery_id: str) -> dict:

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthLayout from './AuthLayout';
 import LogoIcon from './LogoIcon';
-import { registerStart, registerEmailStart } from './FakeUsers';
+import { wilayas } from '../data/algeriaLocations';
 
 function RegisterPage({ addToast }) {
   const navigate = useNavigate();
@@ -12,7 +12,7 @@ function RegisterPage({ addToast }) {
   const [phone, setPhone]       = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole]         = useState('client');
-  const [verifyMethod, setVerifyMethod] = useState('phone'); // phone | email
+  const [wilaya, setWilaya]     = useState('');
   const [confirm, setConfirm]   = useState('');
   const [agreed, setAgreed]     = useState(false);
   const [loading, setLoading]   = useState(false);
@@ -35,13 +35,15 @@ function RegisterPage({ addToast }) {
     const newErrors = {};
     if (!name.trim())  newErrors.name     = 'Full name is required';
     if (!email)        newErrors.email    = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Enter a valid email';
-    if (verifyMethod === 'phone') {
-      if (!phone.trim()) newErrors.phone    = 'Phone number is required';
-      else if (!/^\+?[0-9\s\-()]{8,20}$/.test(phone.trim())) newErrors.phone = 'Enter a valid phone number';
-    }
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) newErrors.email = 'Enter a valid email (e.g. you@domain.com)';
+    if (!phone.trim()) newErrors.phone    = 'Phone number is required';
+    else if (!/^\+?[0-9\s\-()]{8,20}$/.test(phone.trim())) newErrors.phone = 'Enter a valid phone number';
     if (!password)     newErrors.password = 'Password is required';
-    else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters';
+    else if (password.length < 5) newErrors.password = 'Password must be at least 5 characters';
+    else if (!/[0-9]/.test(password) || !/[^a-zA-Z0-9]/.test(password)) {
+      newErrors.password = 'Password must include at least one number and one special character (!@#$…)';
+    }
+    if (!wilaya.trim()) newErrors.wilaya = 'Wilaya is required';
     if (!confirm)      newErrors.confirm  = 'Please confirm your password';
     else if (password !== confirm) newErrors.confirm = 'Passwords do not match';
     if (!agreed)       newErrors.agreed   = 'You must agree to the terms';
@@ -53,31 +55,22 @@ function RegisterPage({ addToast }) {
     if (Object.keys(validationErrors).length > 0) { setErrors(validationErrors); return; }
     setLoading(true);
 
-    const start = verifyMethod === 'email'
-      ? registerEmailStart({ name, email, password, role })
-      : registerStart({ name, email, phone, password, role });
-
-    start
-      .then((out) => {
+    Promise.resolve()
+      .then(() => {
         setLoading(false);
-        if (out.devVerificationCode) {
-          addToast(
-            'info',
-            'Verification code (dev)',
-            `Your code is ${out.devVerificationCode}. Email is not configured on the server, so use this code on the next screen.`,
-          );
-        } else {
-          addToast('success', 'Code sent', 'Check your email for the 6-digit code.');
-        }
-        if (out.devNotice) addToast('info', 'Email setup', out.devNotice);
         navigate('/verify-phone', {
           replace: false,
           state: {
-            pendingId: out.pendingId,
-            phone: verifyMethod === 'phone' ? phone.trim() : '',
+            registration: {
+              name: name.trim(),
+              email: email.trim(),
+              phone: phone.trim(),
+              password,
+              role,
+              wilaya: wilaya.trim(),
+            },
+            phone: phone.trim(),
             email: email.trim(),
-            devVerificationCode: out.devVerificationCode,
-            devNotice: out.devNotice,
           },
         });
       })
@@ -97,60 +90,6 @@ function RegisterPage({ addToast }) {
         </div>
         <h2 className="auth-title">Create your account</h2>
         <p className="auth-subtitle">Join Wassali and start delivering smarter.</p>
-
-        {/* Verification Method */}
-        <div style={{ marginBottom: 12 }}>
-          <div className="verify-method-grid">
-            <div
-              role="button"
-              tabIndex={0}
-              className={`verify-method-card ${verifyMethod === 'email' ? 'active' : ''}`}
-              onClick={() => setVerifyMethod('email')}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setVerifyMethod('email'); }}
-            >
-              <div className="verify-method-row">
-                <div className="verify-method-title">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                    <polyline points="22,6 12,13 2,6" />
-                  </svg>
-                  Email
-                </div>
-                {verifyMethod === 'email' && <span className="verify-method-pill">Selected</span>}
-              </div>
-              <div className="verify-method-sub">
-                Get a 6-digit code in your inbox.
-              </div>
-            </div>
-
-            <div
-              role="button"
-              tabIndex={0}
-              className={`verify-method-card ${verifyMethod === 'phone' ? 'active' : ''}`}
-              onClick={() => setVerifyMethod('phone')}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setVerifyMethod('phone'); }}
-            >
-              <div className="verify-method-row">
-                <div className="verify-method-title">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.63 2.62a2 2 0 0 1-.45 2.11L8 9.73a16 16 0 0 0 6.27 6.27l1.28-1.29a2 2 0 0 1 2.11-.45c.84.3 1.72.51 2.62.63A2 2 0 0 1 22 16.92z"/>
-                  </svg>
-                  Phone
-                </div>
-                {verifyMethod === 'phone' && <span className="verify-method-pill">Selected</span>}
-              </div>
-              <div className="verify-method-sub">
-                Enter phone number and verify with a code.
-              </div>
-            </div>
-          </div>
-
-          <div className="auth-hint-box" style={{ marginBottom: 0 }}>
-            {verifyMethod === 'email'
-              ? 'We will send a 6-digit code to your email (SMTP).'
-              : 'We will send a 6-digit code to your email, and SMS is printed in the backend console until an SMS provider is added.'}
-          </div>
-        </div>
 
         {/* Role Selector */}
         <div className="role-selector">
@@ -232,25 +171,40 @@ function RegisterPage({ addToast }) {
           {errors.email && <span className="auth-field-error">{errors.email}</span>}
         </div>
 
-        {verifyMethod === 'phone' && (
-          <div className="auth-form-group">
-            <label className="auth-label">PHONE NUMBER</label>
-            <div className={`auth-input-wrap ${errors.phone ? 'input-error' : ''}`}>
-              <svg className="auth-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.63 2.62a2 2 0 0 1-.45 2.11L8 9.73a16 16 0 0 0 6.27 6.27l1.28-1.29a2 2 0 0 1 2.11-.45c.84.3 1.72.51 2.62.63A2 2 0 0 1 22 16.92z"/>
-              </svg>
-              <input
-                type="tel"
-                className="auth-input"
-                placeholder="Enter your phone number"
-                value={phone}
-                onChange={e => { setPhone(e.target.value); setErrors({}); }}
-                autoComplete="tel"
-              />
-            </div>
-            {errors.phone && <span className="auth-field-error">{errors.phone}</span>}
+        <div className="auth-form-group">
+          <label className="auth-label">PHONE NUMBER</label>
+          <div className={`auth-input-wrap ${errors.phone ? 'input-error' : ''}`}>
+            <svg className="auth-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.63 2.62a2 2 0 0 1-.45 2.11L8 9.73a16 16 0 0 0 6.27 6.27l1.28-1.29a2 2 0 0 1 2.11-.45c.84.3 1.72.51 2.62.63A2 2 0 0 1 22 16.92z"/>
+            </svg>
+            <input
+              type="tel"
+              className="auth-input"
+              placeholder="Enter your phone number"
+              value={phone}
+              onChange={e => { setPhone(e.target.value); setErrors({}); }}
+              autoComplete="tel"
+            />
           </div>
-        )}
+          {errors.phone && <span className="auth-field-error">{errors.phone}</span>}
+        </div>
+
+        <div className="auth-form-group">
+          <label className="auth-label">WILAYA</label>
+          <div className={`auth-input-wrap ${errors.wilaya ? 'input-error' : ''}`}>
+            <select
+              className="auth-input"
+              value={wilaya}
+              onChange={e => { setWilaya(e.target.value); setErrors({}); }}
+            >
+              <option value="">Select your wilaya</option>
+              {wilayas.map((w) => (
+                <option key={w.code} value={w.name}>{w.code} - {w.name}</option>
+              ))}
+            </select>
+          </div>
+          {errors.wilaya && <span className="auth-field-error">{errors.wilaya}</span>}
+        </div>
 
         <div className="auth-form-group">
           <label className="auth-label">PASSWORD</label>

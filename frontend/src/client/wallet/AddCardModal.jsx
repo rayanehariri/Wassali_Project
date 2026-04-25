@@ -41,7 +41,7 @@ const labelStyle = {
   marginBottom: 7, fontFamily: "'DM Sans',system-ui,sans-serif",
 };
 
-export default function AddCardModal({ onClose }) {
+export default function AddCardModal({ onClose, onSaved, storageKey = "wallet_cards_default" }) {
   const [method,     setMethod]     = useState('edahabia');
   const [fullName,   setFullName]   = useState('');
   const [cardNum,    setCardNum]    = useState('');
@@ -54,6 +54,20 @@ export default function AddCardModal({ onClose }) {
     if (!fullName || !cardNum) return;
     setSubmitting(true);
     await new Promise(r => setTimeout(r, 1200));
+    const digits = cardNum.replace(/\D/g, "");
+    const card = {
+      last4: digits.slice(-4) || "0000",
+      holder: fullName.toUpperCase(),
+      expiry: expiry || "--/--",
+      bg: method === "bank" ? "linear-gradient(145deg,#1a3a5a,#0e2240)" : "linear-gradient(145deg,#1a3a6a,#0e2650)",
+    };
+    try {
+      const raw = localStorage.getItem(storageKey);
+      const old = raw ? JSON.parse(raw) : [];
+      const next = Array.isArray(old) ? [...old, card] : [card];
+      localStorage.setItem(storageKey, JSON.stringify(next));
+    } catch {}
+    onSaved?.(card);
     setSubmitting(false);
     setDone(true);
     setTimeout(onClose, 1400);

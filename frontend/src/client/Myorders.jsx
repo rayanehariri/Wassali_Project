@@ -18,7 +18,8 @@ export default function PageHome({ currentUser, setActive, addToast, onNewDelive
   const [recentLive, setRecentLive] = useState([]);
   const active = liveActive;
   const recent = recentLive;
-  const firstName = currentUser?.name?.split(' ')[0] || 'Alex';
+  const firstName = currentUser?.name?.split(' ')[0] || currentUser?.username || 'there';
+  const hasRecent = recent.length > 0;
 
   const clientId = useMemo(
     () => currentUser?._id ?? currentUser?.id ?? currentUser?.client_id ?? null,
@@ -35,10 +36,16 @@ export default function PageHome({ currentUser, setActive, addToast, onNewDelive
           if (alive) setLiveActive(null);
           return;
         }
-        const isDelivered = String(d.status || '').toLowerCase() === 'delivered';
+        const st = String(d.status || '').toLowerCase();
+        const isDelivered = st === 'delivered';
+        const liveStatus =
+          st === 'delivered' ? 'completed' :
+          st === 'cancelled' ? 'cancelled' :
+          st === 'accepted' ? 'accepted' :
+          'in_transit';
         setLiveActive({
           id: `#${String(d._id || '').slice(0, 8)}`,
-          status: isDelivered ? 'completed' : 'in_transit',
+          status: liveStatus,
           cat: 'PACKAGES',
           title: d.description_of_order || 'Delivery',
           sub: `${d.pickup_address || 'Pickup'} -> ${d.dropoff_address || 'Dropoff'}`,
@@ -67,19 +74,32 @@ export default function PageHome({ currentUser, setActive, addToast, onNewDelive
         const res = await http.get(`/client/deliveries/${clientId}`);
         const deliveries = res?.data?.deliveries ?? res?.data?.data?.deliveries ?? [];
         const mapped = (deliveries || [])
-          .filter((d) => String(d.status || '').toLowerCase() !== 'accepted')
           .slice(0, 3)
           .map((d) => {
             const statusRaw = String(d.status || '').toLowerCase();
-            const status =
-              statusRaw === 'delivered' ? 'completed' :
-              statusRaw === 'cancelled' ? 'cancelled' :
-              statusRaw === 'rejected' ? 'cancelled' :
-              'completed';
+            let badgeStatus = 'active';
+            let badgeLabel = null;
+            if (statusRaw === 'delivered') {
+              badgeStatus = 'completed';
+              badgeLabel = 'DELIVERED';
+            } else if (statusRaw === 'cancelled' || statusRaw === 'rejected') {
+              badgeStatus = 'cancelled';
+              badgeLabel = 'CANCELLED';
+            } else if (statusRaw === 'in_transit') {
+              badgeStatus = 'in_transit';
+              badgeLabel = 'IN TRANSIT';
+            } else if (statusRaw === 'accepted') {
+              badgeStatus = 'accepted';
+              badgeLabel = 'ACCEPTED';
+            } else {
+              badgeStatus = 'in_transit';
+              badgeLabel = 'PENDING';
+            }
             const courier = d.deliverer_name || '—';
             return {
               id: `#${String(d._id || '').slice(0, 8)}`,
-              status,
+              status: badgeStatus,
+              badgeLabel,
               cat: 'PACKAGES',
               title: d.description_of_order || 'Delivery',
               sub: `${d.pickup_address || 'Pickup'} -> ${d.dropoff_address || 'Dropoff'}`,
@@ -88,7 +108,7 @@ export default function PageHome({ currentUser, setActive, addToast, onNewDelive
               courier,
               av: courier === '—' ? '—' : courier.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase(),
               eta: null,
-              pct: status === 'completed' ? 100 : 0,
+              pct: badgeStatus === 'completed' ? 100 : badgeStatus === 'in_transit' ? 72 : badgeStatus === 'accepted' ? 35 : 0,
               from: d.pickup_address || 'Pickup',
               to: d.dropoff_address || 'Dropoff',
             };
@@ -138,11 +158,11 @@ export default function PageHome({ currentUser, setActive, addToast, onNewDelive
 
         <div className="cd-two-col-grid">
           <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-            {active && (
+            {active ? (
               <div style={{ borderRadius:18, background:'linear-gradient(135deg,#0d2a4a,#0a1e38)', border:'1px solid rgba(59,130,246,.25)', padding:20 }}>
                 <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
                   <div>
-                    <Badge status="in_transit"/>
+                    <Badge status={active.status} />
                     <h2 style={{ margin:'8px 0 3px', fontSize:19, fontWeight:700, color:'white', fontFamily:"'Outfit',system-ui,sans-serif" }}>{active.title}</h2>
                     <p style={{ margin:0, fontSize:11, color:'rgba(255,255,255,.4)', fontFamily:"'JetBrains Mono',monospace" }}>Order {active.id}</p>
                   </div>
@@ -171,6 +191,23 @@ export default function PageHome({ currentUser, setActive, addToast, onNewDelive
                   </button>
                 </div>
               </div>
+            ) : (
+              <div style={{ borderRadius:18, background:'linear-gradient(135deg,#0d2a4a,#0a1e38)', border:'1px solid rgba(59,130,246,.18)', padding:20 }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+                  <div>
+                    <Badge status="in_transit" label="NO REQUEST"/>
+                    <h2 style={{ margin:'8px 0 3px', fontSize:19, fontWeight:700, color:'white', fontFamily:"'Outfit',system-ui,sans-serif" }}>No active delivery</h2>
+                    <p style={{ margin:0, fontSize:11, color:'rgba(255,255,255,.4)', fontFamily:"'JetBrains Mono',monospace" }}>Timeline starts when you create your first request</p>
+                  </div>
+                  <p style={{ margin:0, fontSize:24, fontWeight:700, color:'rgba(255,255,255,.4)', fontFamily:"'Outfit',system-ui,sans-serif" }}>—</p>
+                </div>
+                <div style={{ width:'100%', height:8, background:'rgba(255,255,255,.08)', borderRadius:9999, marginBottom:14 }}>
+                  <div style={{ width:'0%', height:'100%', borderRadius:9999, background:'linear-gradient(90deg,#4EDEA3,#ADC6FF)' }}/>
+                </div>
+                <button onClick={() => onNewDelivery?.()} className="cd-track-btn" style={{ display:'flex', alignItems:'center', gap:8, background:'#112040', border:'1px solid rgba(59,130,246,.35)', borderRadius:12, padding:'10px 16px', color:'#60a5fa', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:"'DM Sans',system-ui,sans-serif" }}>
+                  Create first request
+                </button>
+              </div>
             )}
 
             <div>
@@ -189,7 +226,15 @@ export default function PageHome({ currentUser, setActive, addToast, onNewDelive
                 </button>
               </div>
               <div className="cd-recent-grid">
-                {recent.map((o, i) => {
+                {(hasRecent ? recent : [{
+                  id: 'empty-recent',
+                  status: 'completed',
+                  cat: 'PACKAGES',
+                  title: 'No requests yet',
+                  sub: 'Your completed deliveries will appear here.',
+                  amount: '0 DZD',
+                  date: '—',
+                }]).map((o, i) => {
                   const cc = CAT_COLORS[o.cat] || CAT_COLORS.PACKAGES;
                   return (
                     <div key={o.id} className="cd-order-hover" style={{ background:'rgba(45,52,73,0.6)', border:'1px solid rgba(255,255,255,.07)', borderRadius:14, padding:14, cursor:'pointer', backdropFilter:'blur(4px)', animation:`cdFadeUp .3s ease ${i*.07+.15}s both` }}>
@@ -206,7 +251,7 @@ export default function PageHome({ currentUser, setActive, addToast, onNewDelive
                       <p style={{ margin:'0 0 10px', fontSize:11, color:'rgba(255,255,255,.45)', fontFamily:"'DM Sans',system-ui,sans-serif" }}>{o.sub}</p>
                       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                         <span style={{ fontSize:11, color:'rgba(255,255,255,.6)', fontFamily:"'JetBrains Mono',monospace" }}>{o.amount}</span>
-                        <Badge status={o.status} label="COMPLETED"/>
+                        {hasRecent ? <Badge status={o.status} label={o.badgeLabel || undefined} /> : <Badge status="in_transit" label="NO ITEM" />}
                       </div>
                     </div>
                   );

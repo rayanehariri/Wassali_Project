@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
+import { http } from '../api/http';
 
 // ── Animated counter ──────────────────────────────────────
 function useCounter(target, duration = 1400, delay = 0) {
@@ -77,35 +78,22 @@ function StatusBadge({ status }) {
 }
 
 // ── Mock data ─────────────────────────────────────────────
-const ORDERS = [
-  { id: '#Wq-9928-DZ', date: 'Today, 14:20',    title: 'Boulangerie Ben Aknoun', cat: 'Pharmacy',  amount: '2,100', status: 'transit',   courier: 'Yassine B.' },
-  { id: '#Wq-9280-DZ', date: 'May 12',           title: 'Supermarché Ardis',      cat: 'Groceries', amount: '8,450', status: 'completed', courier: 'Karim M.'   },
-  { id: '#Wq-9177-DZ', date: 'May 10',           title: 'Personal Courier',       cat: 'Packages',  amount: '3,500', status: 'completed', courier: 'Omar F.'    },
-  { id: '#Wq-9050-DZ', date: 'May 8',            title: 'CityPharma Express',     cat: 'Pharmacy',  amount: '1,200', status: 'cancelled', courier: '—'          },
-  { id: '#Wq-8991-DZ', date: 'May 5',            title: 'Fresh Market Delivery',  cat: 'Groceries', amount: '5,800', status: 'completed', courier: 'Lina M.'    },
-];
-
 const CAT_COLORS = {
   Pharmacy:  '#60a5fa',
   Groceries: '#4ade80',
   Packages:  '#a78bfa',
 };
 
-const TRANSACTIONS = [
-  { desc: 'Wallet Top Up',           date: 'May 10', amount: '+5,000 DZD', neg: false },
-  { desc: 'Supermarché Ardis',       date: 'May 10', amount: '-8,450 DZD', neg: true  },
-  { desc: 'Personal Courier',        date: 'May 8',  amount: '-3,500 DZD', neg: true  },
-  { desc: 'Refund — CityPharma',     date: 'May 8',  amount: '+1,200 DZD', neg: false },
-  { desc: 'Community Violation Fee', date: 'May 5',  amount: '-2,500 DZD', neg: true  },
-];
-
 // ══════════════════════════════════════════════════════════
 export default function ClientProfile({ currentUser }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [visible,   setVisible]   = useState(false);
+  const [orders, setOrders] = useState([]);
+  const hasOrders = orders.length > 0;
   const fullName = currentUser?.name || 'Client User';
   const email = currentUser?.email || 'client@wassali.dz';
   const phone = currentUser?.phone || '+213 000 000 000';
+  const wilaya = currentUser?.wilaya || 'Not set';
   const initials = (fullName || 'CU')
     .split(' ')
     .map((part) => part[0])
@@ -114,10 +102,56 @@ export default function ClientProfile({ currentUser }) {
     .toUpperCase();
 
   useEffect(() => { const t = setTimeout(() => setVisible(true), 60); return () => clearTimeout(t); }, []);
+  useEffect(() => {
+    let alive = true;
+    async function loadOrders() {
+      try {
+        const me = await http.get('/auth/me/');
+        const meUser = me?.data?.user ?? me?.data?.data?.user;
+        const clientId = meUser?._id ?? currentUser?._id ?? currentUser?.id ?? currentUser?.client_id;
+        if (!clientId) return;
+        const res = await http.get(`/client/deliveries/${clientId}`);
+        const list = res?.data?.deliveries ?? res?.data?.data?.deliveries ?? [];
+        const mapped = list.map((o) => {
+          const raw = String(o.status || '').toLowerCase();
+          const status = raw === 'accepted' ? 'transit' : raw === 'cancelled' ? 'cancelled' : raw === 'rejected' ? 'cancelled' : 'completed';
+          return {
+            id: `#${String(o._id || '').slice(0, 8)}`,
+            date: o.created_at ? String(o.created_at).slice(0, 10) : '—',
+            title: o.description_of_order || 'Delivery',
+            cat: 'Packages',
+            amount: Number(o.price || 0).toLocaleString(),
+            status,
+            courier: o.deliverer_name || '—',
+          };
+        });
+        if (alive) setOrders(mapped);
+      } catch {
+        if (alive) setOrders([]);
+      }
+    }
+    loadOrders();
+    return () => { alive = false; };
+  }, [currentUser]);
 
-  const totalOrders  = useCounter(47,      1400, 300);
-  const totalSpent   = useCounter(142500,  1800, 450);
-  const deliveries   = useCounter(44,      1300, 600);
+  const ORDERS = useMemo(() => orders, [orders]);
+  const PROFILE_TX = useMemo(
+    () =>
+      ORDERS.map((o) => ({
+        desc: o.title,
+        date: o.date,
+        amount: `-${Number(String(o.amount).replace(/,/g, "") || 0).toLocaleString()} DZD`,
+        neg: true,
+      })),
+    [ORDERS]
+  );
+  const totalOrdersReal = ORDERS.length;
+  const totalSpentReal = ORDERS.reduce((sum, o) => sum + Number(String(o.amount).replace(/,/g, "") || 0), 0);
+  const completedReal = ORDERS.filter((o) => o.status === "completed").length;
+
+  const totalOrders  = useCounter(totalOrdersReal,      1400, 300);
+  const totalSpent   = useCounter(totalSpentReal,       1800, 450);
+  const deliveries   = useCounter(completedReal,        1300, 600);
   const walletBal    = useCounter(12450,   1600, 750);
 
   const STATS = [
@@ -250,11 +284,15 @@ export default function ClientProfile({ currentUser }) {
                   <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
                   <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Algiers, Algeria</span>
                   <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <Stars rating={4.8}/>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#fbbf24' }}>4.8</span>
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>(47 orders)</span>
-                  </div>
+                  {hasOrders ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Stars rating={4.8}/>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#fbbf24' }}>4.8</span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>({totalOrdersReal} orders)</span>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>(No orders yet)</span>
+                  )}
                 </div>
               </div>
 
@@ -333,12 +371,12 @@ export default function ClientProfile({ currentUser }) {
                     </h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
                       {[
-                        { label: 'Full Name',        val: 'Mohamed Benali'       },
-                        { label: 'Client ID',        val: 'CLT-00847', mono: true },
-                        { label: 'Email',            val: 'm.benali@wassali.dz'  },
-                        { label: 'Phone',            val: '+213 550 789 012'     },
-                        { label: 'Location',         val: 'Algiers, Algeria'     },
-                        { label: 'Member Since',     val: 'March 2023'           },
+                        { label: 'Full Name',        val: fullName },
+                        { label: 'Client ID',        val: currentUser?._id || currentUser?.id || '—', mono: true },
+                        { label: 'Email',            val: email },
+                        { label: 'Phone',            val: phone },
+                        { label: 'Wilaya',           val: wilaya },
+                        { label: 'Member Since',     val: '—' },
                         { label: 'Account Status',   val: 'Active ✓', green: true },
                         { label: 'Verification',     val: 'Verified ✓', green: true },
                         { label: 'Preferred Payment',val: 'Wassali Wallet'       },
@@ -376,6 +414,11 @@ export default function ClientProfile({ currentUser }) {
                         </div>
                       </div>
                     ))}
+                    {!hasOrders && (
+                      <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+                        No recent orders yet.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -407,6 +450,7 @@ export default function ClientProfile({ currentUser }) {
                   </div>
 
                   {/* Order breakdown donut */}
+                  {hasOrders && (
                   <div className="cp-card" style={{ background: 'linear-gradient(145deg,#0d1e3a,#081528)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: 22, animation: 'fadeUp .4s ease .3s both' }}>
                     <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ width: 3, height: 16, background: '#fbbf24', borderRadius: 2, display: 'inline-block' }}/>
@@ -437,8 +481,10 @@ export default function ClientProfile({ currentUser }) {
                       </div>
                     </div>
                   </div>
+                  )}
 
                   {/* Trusted deliverers */}
+                  {hasOrders && (
                   <div className="cp-card" style={{ background: 'linear-gradient(145deg,#0d1e3a,#081528)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 18, padding: 20, animation: 'fadeUp .4s ease .38s both' }}>
                     <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ width: 3, height: 16, background: '#34d399', borderRadius: 2, display: 'inline-block' }}/>
@@ -459,6 +505,7 @@ export default function ClientProfile({ currentUser }) {
                       </div>
                     ))}
                   </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -489,6 +536,11 @@ export default function ClientProfile({ currentUser }) {
                     <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', paddingLeft: 14 }}>{o.date}</span>
                   </div>
                 ))}
+                {!hasOrders && (
+                  <p style={{ margin: 0, padding: '14px 22px', fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+                    No order history yet.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -504,7 +556,7 @@ export default function ClientProfile({ currentUser }) {
                 <div style={{ display: 'grid', padding: '9px 22px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.1em', gridTemplateColumns: '1fr 120px 140px' }}>
                   <span>DESCRIPTION</span><span>DATE</span><span>AMOUNT</span>
                 </div>
-                {TRANSACTIONS.map((tx, i) => (
+                {PROFILE_TX.map((tx, i) => (
                   <div key={i} className="cp-row" style={{ display: 'grid', alignItems: 'center', padding: '13px 22px', borderBottom: '1px solid rgba(255,255,255,0.04)', gridTemplateColumns: '1fr 120px 140px', transition: 'background .15s', animation: `fadeUp .3s ease ${i * .06}s both` }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ width: 28, height: 28, borderRadius: 8, background: tx.neg ? 'rgba(248,113,113,0.1)' : 'rgba(74,222,128,0.1)', border: `1px solid ${tx.neg ? 'rgba(248,113,113,0.25)' : 'rgba(74,222,128,0.25)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -518,6 +570,11 @@ export default function ClientProfile({ currentUser }) {
                     <span style={{ fontSize: 13, fontWeight: 700, color: tx.neg ? '#f87171' : '#4ade80', fontFamily: "'JetBrains Mono',monospace" }}>{tx.amount}</span>
                   </div>
                 ))}
+                {PROFILE_TX.length === 0 && (
+                  <p style={{ margin: 0, padding: '14px 22px', fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+                    No transactions yet.
+                  </p>
+                )}
               </div>
 
               {/* Wallet summary */}

@@ -2,7 +2,7 @@
 // TxHistoryModal.jsx — Full Transaction History
 // Usage: <TxHistoryModal onClose={() => {}} />
 // ═══════════════════════════════════════════════════════════
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { TxIcon } from '../Shared';
 
 const ALL_TX = [
@@ -21,14 +21,15 @@ const FILTERS = [
   { k:'orders', label:'Orders'  },
 ];
 
-export default function TxHistoryModal({ onClose }) {
+export default function TxHistoryModal({ onClose, transactions = [] }) {
   const [filter, setFilter] = useState('all');
   const [page,   setPage]   = useState(1);
+  const sourceTx = useMemo(() => (transactions.length > 0 ? transactions : ALL_TX), [transactions]);
 
   const filtered =
-    filter === 'topups' ? ALL_TX.filter(t => t.type === 'topup') :
-    filter === 'orders' ? ALL_TX.filter(t => t.type !== 'topup') :
-    ALL_TX;
+    filter === 'topups' ? sourceTx.filter(t => t.type === 'topup' || t.neg === false) :
+    filter === 'orders' ? sourceTx.filter(t => t.type !== 'topup' && t.neg !== false) :
+    sourceTx;
 
   return (
     <div

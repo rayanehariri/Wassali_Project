@@ -43,6 +43,7 @@ class RegisterStartSchema(BaseSchema):
         validate=validate.OneOf(["client", "deliverer"]),
         load_default="client",
     )
+    wilaya = fields.Str(required=True, validate=validate.Length(min=2, max=80))
 
 
 class RegisterVerifySchema(BaseSchema):
@@ -77,10 +78,15 @@ class CreateDeliverySchema(BaseSchema):
 
 class CreateRequestSchema(BaseSchema):
     client_id = fields.Str(required=True)
-    pickup = fields.Str(required=True)
-    dropoff = fields.Str(required=True)
+    pickup = fields.Dict(required=True)
+    dropoff = fields.Dict(required=True)
     description = fields.Str(required=True)
     price = fields.Float(required=True)
+    size = fields.Str(load_default="", allow_none=True)
+    weight = fields.Str(load_default="", allow_none=True)
+    fragile = fields.Bool(load_default=False)
+    photo_name = fields.Str(load_default="", allow_none=True)
+    photo_size = fields.Int(load_default=0)
     pickup_lat = fields.Float(load_default=None, allow_none=True)
     pickup_lng = fields.Float(load_default=None, allow_none=True)
     dropoff_lat = fields.Float(load_default=None, allow_none=True)
@@ -96,6 +102,7 @@ class RegisterEmailStartSchema(BaseSchema):
         validate=validate.OneOf(["client", "deliverer"]),
         load_default="client",
     )
+    wilaya = fields.Str(required=True, validate=validate.Length(min=2, max=80))
 
 
 class SelectDelivererSchema(BaseSchema):

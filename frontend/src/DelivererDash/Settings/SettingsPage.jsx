@@ -13,6 +13,7 @@ import {
   deleteSession, updatePermission,
   regenerateAccessKey, copyAccessKey, changePassword,
 } from "./FakeApi";
+import { http } from "../../api/http";
 
 // ── Change Password Modal ─────────────────────────────────────────────────────
 function ChangePasswordModal({ onClose, onSave }) {
@@ -148,6 +149,8 @@ export default function SettingsPage() {
   const [loading,        setLoading]        = useState(true);
 
   // Login & Identity
+  const [displayName,    setDisplayName]    = useState("");
+  const [username,       setUsername]       = useState("");
   const [loginEmail,     setLoginEmail]     = useState("");
   const [recoveryEmail,  setRecoveryEmail]  = useState("");
   const [credSaving,     setCredSaving]     = useState(false);
@@ -182,6 +185,15 @@ export default function SettingsPage() {
       try {
         const s = await getSettings();
         setSettings(s);
+        try {
+          const meRes = await http.get("/deliverer/me");
+          const u = meRes?.data?.user ?? null;
+          setDisplayName(String(u?.name || "").trim());
+          setUsername(String(u?.username || "").trim());
+        } catch {
+          setDisplayName("");
+          setUsername("");
+        }
         setLoginEmail(s.loginEmail);
         setRecoveryEmail(s.recoveryEmail);
         setTwoFactor(s.twoFactorEnabled);
@@ -285,6 +297,27 @@ export default function SettingsPage() {
                     <Fingerprint size={18} color="#3b82f6" />
                   </div>
                   <h2 className="!text-[17px] !font-bold !text-white !m-0">Login & Identity</h2>
+                </div>
+
+                <div className="!grid !grid-cols-1 sm:!grid-cols-2 !gap-4 !mb-4">
+                  <div>
+                    <label className="!block !text-[10px] !font-bold !text-slate-500 !mb-2 !tracking-widest">FULL NAME</label>
+                    <input
+                      readOnly
+                      value={displayName}
+                      className="!w-full !px-4 !py-3 !rounded-xl !text-[13px] !text-slate-300 !outline-none"
+                      style={{ background: "#0a1220", border: "1px solid #1e2d3d" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="!block !text-[10px] !font-bold !text-slate-500 !mb-2 !tracking-widest">USERNAME</label>
+                    <input
+                      readOnly
+                      value={username}
+                      className="!w-full !px-4 !py-3 !rounded-xl !text-[13px] !text-slate-300 !outline-none"
+                      style={{ background: "#0a1220", border: "1px solid #1e2d3d" }}
+                    />
+                  </div>
                 </div>
 
                 {/* Email fields row */}

@@ -15,6 +15,19 @@ def _utc_now():
     return datetime.now(timezone.utc)
 
 
+def _format_delivery_status_label(raw: str | None) -> str:
+    key = (raw or "").lower().strip().replace(" ", "_")
+    mapping = {
+        "accepted": "Accepted",
+        "in_transit": "In Transit",
+        "delivered": "Delivered",
+        "cancelled": "Cancelled",
+        "canceled": "Cancelled",
+        "pending": "Pending",
+    }
+    return mapping.get(key, (raw or "Unknown").replace("_", " ").title())
+
+
 def _initials(name: str) -> str:
     parts = (name or "").strip().split()
     if not parts:
@@ -92,6 +105,34 @@ def mark_delivery_as_delivered(delivery_id: str):
     return fail(result.get("message", "Mark delivered failed"), 400)
 
 
+@deliverer.route("/deliveries/start_transit/<delivery_id>", methods=["POST"])
+@require_auth("deliverer")
+def start_delivery_transit(delivery_id: str):
+    d = deliveries_collection.find_one({"_id": delivery_id})
+    if not d:
+        return fail("Delivery not found", 404)
+    if d.get("deliverer_id") != request.current_user.get("_id"):
+        return fail("You can only update deliveries assigned to you", 403, code="FORBIDDEN")
+    result = Delivery.mark_as_in_transit(delivery_id, request.current_user.get("_id"))
+    if result["success"]:
+        return success(result.get("message", "Delivery is in transit"), status=200)
+    return fail(result.get("message", "Could not update delivery status"), 400)
+
+
+@deliverer.route("/deliveries/cancel/<delivery_id>", methods=["POST"])
+@require_auth("deliverer")
+def cancel_delivery_by_deliverer(delivery_id: str):
+    result = Delivery.cancel_by_deliverer(delivery_id, request.current_user.get("_id"))
+    if result["success"]:
+        return success(result.get("message", "Delivery cancelled"), status=200)
+    msg = result.get("message", "").lower()
+    if "not found" in msg:
+        return fail(result["message"], 404)
+    if "assigned" in msg:
+        return fail(result["message"], 403, code="FORBIDDEN")
+    return fail(result.get("message", "Cancel failed"), 400)
+
+
 @deliverer.route("/deliverer/drop", methods=["DELETE"])
 @require_auth("deliverer")
 def drop_delivery():
@@ -136,6 +177,19 @@ def accept_request(request_id: str):
     if "active delivery" in msg or "complete it before" in msg:
         return fail(result["message"], 409, code="DELIVERER_BUSY")
     return fail(result.get("message", "Accept failed"), 400)
+
+
+@deliverer.route("/requests/<request_id>/reject", methods=["POST"])
+@require_auth("deliverer")
+def reject_request(request_id: str):
+    deliverer_id = request.current_user.get("_id")
+    result = DeliveryRequest.reject(request_id, deliverer_id)
+    if result.get("success"):
+        return success("Request rejected", data={"request_id": request_id}, status=200)
+    msg = (result.get("message") or "").lower()
+    if "not found" in msg:
+        return fail(result["message"], 404)
+    return fail(result.get("message", "Reject failed"), 400)
 
 
 @deliverer.route("/requests/awaiting-client-approval", methods=["GET"])
@@ -216,7 +270,7 @@ def recent_deliveries():
                 "id": f"#{str(d.get('_id'))[:8]}",
                 "items": d.get("description_of_order") or "Delivery",
                 "date": str(d.get("created_at") or ""),
-                "status": (d.get("status") or "Completed").title(),
+                "status": _format_delivery_status_label(d.get("status")),
                 "payout": f"{float(d.get('price', 0) or 0):.2f} DZD",
             }
         )

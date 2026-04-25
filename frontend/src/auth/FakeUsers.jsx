@@ -4,8 +4,33 @@
 
 // FakeAuthApi.js
 import { http } from "../api/http";
+
+function firstValidationMessage(errors) {
+  if (!errors || typeof errors !== "object") return null;
+  const walk = (v) => {
+    if (typeof v === "string") return v;
+    if (Array.isArray(v)) return v.find(Boolean) || null;
+    if (v && typeof v === "object") {
+      for (const k of Object.keys(v)) {
+        const r = walk(v[k]);
+        if (r) return r;
+      }
+    }
+    return null;
+  };
+  return walk(errors);
+}
+
+/** Readable message from Flask `{ message, errors }` or axios network errors */
+export function formatAuthApiError(err, fallback = "Request failed.") {
+  const data = err?.response?.data;
+  const detail = firstValidationMessage(data?.errors);
+  if (detail && typeof detail === "string") return detail;
+  if (data?.message && String(data.message).trim()) return String(data.message).trim();
+  return err?.message || fallback;
+}
 import { signInWithCustomToken, signOut } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { auth, db } from "../Firebase.config";
 import { normalizeRole } from "./roles";
  
@@ -28,7 +53,15 @@ const FALLBACK_ADMIN = {
  
 // ─── Helper: sign into Firebase ────────────────────────────────────────────
 async function signIntoFirebase(user, firebaseToken) {
-  if (!firebaseToken) return user;
+  if (!firebaseToken) {
+    // Backend may not return a custom token yet: reuse existing Firestore uid if linked by mongoId.
+    try {
+      const q = query(collection(db, "users"), where("mongoId", "==", user.id));
+      const snap = await getDocs(q);
+      if (!snap.empty) return { ...user, uid: snap.docs[0].id };
+    } catch {}
+    return user;
+  }
   try {
     await signInWithCustomToken(auth, firebaseToken);
     const uid = auth.currentUser?.uid;
@@ -98,7 +131,9 @@ export async function login(email, password) {
     let user = {
       id:             res.data._id,
       name:           res.data.username,
-      email:          email,
+      email:          res.data.email || email,
+      phone:          res.data.phone || "",
+      wilaya:         res.data.wilaya || "",
       role:           normalizeRole(rawRole),
       status:         res.data.status         ?? "active",
       onboardingDone: res.data.onboardingDone  ?? false,
@@ -165,9 +200,7 @@ export async function register({ name, email, phone, password, role }) {
     return { success: true };
  
   } catch (err) {
-    throw new Error(
-      err.response?.data?.message || err.message || "Registration failed."
-    );
+    throw new Error(formatAuthApiError(err, "Registration failed."));
   }
 }
  
@@ -186,55 +219,73 @@ export async function forgotPassword(email) {
 }
 
 // ─── register (phone verify flow) ───────────────────────────────────────────
-export async function registerStart({ name, email, phone, password, role }) {
-  const res = await http.post("/auth/register/start/", {
-    username: name,
-    email,
-    phone,
-    password,
-    role: role || "client",
-  });
-  const body = res?.data ?? {};
-  if (body.success === false) throw new Error(body.message || "Could not start registration.");
-  return {
-    pendingId: body.pending_id,
-    expiresIn: body.expires_in_seconds ?? 900,
-    devVerificationCode: body.dev_verification_code,
-    devNotice: body.dev_notice,
-  };
+export async function registerStart({ name, email, phone, password, role, wilaya }) {
+  try {
+    const res = await http.post("/auth/register/start/", {
+      username: name,
+      email,
+      phone,
+      password,
+      role: role || "client",
+      wilaya,
+    });
+    const body = res?.data ?? {};
+    if (body.success === false) throw new Error(body.message || "Could not start registration.");
+    return {
+      pendingId: body.pending_id,
+      expiresIn: body.expires_in_seconds ?? 900,
+      devVerificationCode: body.dev_verification_code,
+      devNotice: body.dev_notice,
+    };
+  } catch (err) {
+    throw new Error(formatAuthApiError(err, "Could not start registration."));
+  }
 }
 
-export async function registerEmailStart({ name, email, password, role }) {
-  const res = await http.post("/auth/register/email/start/", {
-    username: name,
-    email,
-    password,
-    role: role || "client",
-  });
-  const body = res?.data ?? {};
-  if (body.success === false) throw new Error(body.message || "Could not start registration.");
-  return {
-    pendingId: body.pending_id,
-    expiresIn: body.expires_in_seconds ?? 900,
-    devVerificationCode: body.dev_verification_code,
-    devNotice: body.dev_notice,
-  };
+export async function registerEmailStart({ name, email, password, role, wilaya }) {
+  try {
+    const res = await http.post("/auth/register/email/start/", {
+      username: name,
+      email,
+      password,
+      role: role || "client",
+      wilaya,
+    });
+    const body = res?.data ?? {};
+    if (body.success === false) throw new Error(body.message || "Could not start registration.");
+    return {
+      pendingId: body.pending_id,
+      expiresIn: body.expires_in_seconds ?? 900,
+      devVerificationCode: body.dev_verification_code,
+      devNotice: body.dev_notice,
+    };
+  } catch (err) {
+    throw new Error(formatAuthApiError(err, "Could not start registration."));
+  }
 }
 
 export async function registerVerify(pendingId, code) {
-  const res = await http.post("/auth/register/verify/", { pending_id: pendingId, code });
-  const body = res?.data ?? {};
-  if (body.success === false) throw new Error(body.message || "Verification failed.");
+  try {
+    const res = await http.post("/auth/register/verify/", { pending_id: pendingId, code });
+    const body = res?.data ?? {};
+    if (body.success === false) throw new Error(body.message || "Verification failed.");
+  } catch (err) {
+    throw new Error(formatAuthApiError(err, "Verification failed."));
+  }
 }
 
 export async function registerResendCode(pendingId) {
-  const res = await http.post("/auth/register/resend-code/", { pending_id: pendingId });
-  const body = res?.data ?? {};
-  if (body.success === false) throw new Error(body.message || "Resend failed.");
-  return {
-    devVerificationCode: body.dev_verification_code,
-    devNotice: body.dev_notice,
-  };
+  try {
+    const res = await http.post("/auth/register/resend-code/", { pending_id: pendingId });
+    const body = res?.data ?? {};
+    if (body.success === false) throw new Error(body.message || "Resend failed.");
+    return {
+      devVerificationCode: body.dev_verification_code,
+      devNotice: body.dev_notice,
+    };
+  } catch (err) {
+    throw new Error(formatAuthApiError(err, "Resend failed."));
+  }
 }
  
 // ─── changeUsername ────────────────────────────────────────────────────────

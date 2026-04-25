@@ -57,7 +57,7 @@ function enrichedUser(user) {
   if (!user) return null;
   return {
     ...user,
-    uid: user.uid || user.id || null,
+    uid: user.uid || null,
   };
 }
  
@@ -255,7 +255,7 @@ export default function App() {
       }
     });
     return () => unsub();
-  }, []);
+  }, [currentUser]);
  
   // ── Persist currentUser to localStorage whenever it changes ────────────
   useEffect(() => {
@@ -278,7 +278,8 @@ export default function App() {
     }
     if (!role) role = 'client';
 
-    let finalUser = { ...user, role };
+    const firebaseUid = user.uid || auth.currentUser?.uid || null;
+    let finalUser = { ...user, role, uid: firebaseUid };
  
     if (role === 'deliverer') {
       // Read welcomeSeen from the previously saved user in localStorage,

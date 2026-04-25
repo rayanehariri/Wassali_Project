@@ -99,7 +99,7 @@ def _gen_six_digit() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
-def start_phone_registration(username: str, email: str, phone: str, password: str, role: str) -> dict:
+def start_phone_registration(username: str, email: str, phone: str, password: str, role: str, wilaya: str) -> dict:
     try:
         identity = Identity(username.strip(), email.strip(), password)
     except ValueError as e:
@@ -125,6 +125,9 @@ def start_phone_registration(username: str, email: str, phone: str, password: st
     phone_clean = (phone or "").strip()
     if len(phone_clean) < 8:
         return {"success": False, "message": "Enter a valid phone number.", "code": "VALIDATION_ERROR"}
+    wilaya_clean = (wilaya or "").strip()
+    if len(wilaya_clean) < 2:
+        return {"success": False, "message": "Wilaya is required.", "code": "VALIDATION_ERROR"}
 
     now = _utc_now()
     pending_phone_registrations.delete_many({"email": identity.email})
@@ -141,6 +144,7 @@ def start_phone_registration(username: str, email: str, phone: str, password: st
             "phone": phone_clean,
             "password": identity.password,
             "role": r.value,
+            "wilaya": wilaya_clean,
             "code_hash": code_hash,
             "expires_at": now + timedelta(minutes=15),
             "created_at": now,
@@ -167,17 +171,26 @@ def start_phone_registration(username: str, email: str, phone: str, password: st
         "message": "Verification code sent.",
         "pending_id": pid,
         "expires_in_seconds": 900,
+        # Phone mode is currently dev-SMS only in this app: always expose code for UI display.
+        "dev_verification_code": code,
     }
     if not sent or not is_mail_configured():
         out["dev_notice"] = (
             "No real email was sent. Configure MAIL_SERVER (SMTP) to deliver mail. "
             "For local testing, use the code below on the next screen."
         )
-        out["dev_verification_code"] = code
+    else:
+        out["dev_notice"] = (
+            "Phone verification currently uses dev SMS display in-app. "
+            "Use the code shown on the next screen."
+        )
     return out
 
 
-def start_email_registration(username: str, email: str, password: str, role: str) -> dict:
+def start_email_registration(username: str, email: str, password: str, role: str, wilaya: str) -> dict:
+    wilaya_clean = (wilaya or "").strip()
+    if len(wilaya_clean) < 2:
+        return {"success": False, "message": "Wilaya is required.", "code": "VALIDATION_ERROR"}
     """
     Start registration using email verification only (no phone required).
     Sends a 6-digit code to the user's email (real SMTP if configured).
@@ -219,6 +232,7 @@ def start_email_registration(username: str, email: str, password: str, role: str
             "phone": "",
             "password": identity.password,
             "role": r.value,
+            "wilaya": wilaya_clean,
             "code_hash": code_hash,
             "expires_at": now + timedelta(minutes=15),
             "created_at": now,
@@ -281,6 +295,7 @@ def verify_phone_and_create_user(pending_id: str, code: str) -> dict:
         "username": doc["username"],
         "email": doc["email"],
         "phone": doc.get("phone") or "",
+        "wilaya": doc.get("wilaya") or "",
         "password": doc["password"],
         "role": doc["role"],
         "status": status.value,
@@ -318,8 +333,14 @@ def resend_phone_code(pending_id: str) -> dict:
         sent = bool(send_mail(doc["email"], subject, text, f"<p>Your new code is <b>{code}</b>.</p>"))
     except Exception as e:
         print(f"[resend mail error] {e}")
-    out: dict = {"success": True, "message": "New code sent."}
+    out: dict = {
+        "success": True,
+        "message": "New code sent.",
+        # Keep phone flow deterministic for local/dev usage.
+        "dev_verification_code": code,
+    }
     if not sent or not is_mail_configured():
         out["dev_notice"] = "No real email sent (configure SMTP). Use this new code:"
-        out["dev_verification_code"] = code
+    else:
+        out["dev_notice"] = "Phone verification currently uses dev SMS display in-app."
     return out

@@ -33,7 +33,11 @@ let FAKE_SETTINGS = {
 // Used by: SettingsPage on mount
 export async function getSettings() {
   const res = await http.get("/deliverer/settings");
-  return res?.data?.data?.settings ?? { ...FAKE_SETTINGS, sessions: [...FAKE_SETTINGS.sessions] };
+  return (
+    res?.data?.settings ??
+    res?.data?.data?.settings ??
+    { ...FAKE_SETTINGS, sessions: [...FAKE_SETTINGS.sessions] }
+  );
 }
 
 // ─── 2. updateCredentials ────────────────────────────────────────────────────

@@ -22,8 +22,9 @@ export const TICKETS = [
 ];
 
 export const BADGE_MAP = {
-  in_transit: { text:'IN TRANSIT',  color:'#4ade80', bg:'rgba(74,222,128,.1)',  border:'rgba(74,222,128,.2)'  },
-  completed:  { text:'COMPLETED',   color:'#4ade80', bg:'rgba(74,222,128,.1)',  border:'rgba(74,222,128,.2)'  },
+  accepted:   { text:'ACCEPTED',    color:'#22c55e', bg:'rgba(34,197,94,.18)',  border:'rgba(34,197,94,.35)'  },
+  in_transit: { text:'IN TRANSIT',  color:'#60a5fa', bg:'rgba(96,165,250,.12)', border:'rgba(96,165,250,.28)' },
+  completed:  { text:'DELIVERED',   color:'#4ade80', bg:'rgba(74,222,128,.1)',  border:'rgba(74,222,128,.2)'  },
   cancelled:  { text:'CANCELLED',   color:'#f87171', bg:'rgba(248,113,113,.1)', border:'rgba(248,113,113,.2)' },
   active:     { text:'IN PROGRESS', color:'#fbbf24', bg:'rgba(251,191,36,.1)',  border:'rgba(251,191,36,.2)'  },
   resolved:   { text:'RESOLVED',    color:'#4ade80', bg:'rgba(74,222,128,.1)',  border:'rgba(74,222,128,.2)'  },

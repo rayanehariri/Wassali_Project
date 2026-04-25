@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Phone, Info } from "lucide-react";
 import { useChat } from "../hooks/Usechat";
+import { getActiveTask } from "./Schedule/FakeApi";
 import {
   ChatAvatar, ConvItem, MessageBubble,
   TypingDots, DateSeparator, MessageInput,
@@ -16,16 +17,42 @@ export default function DelivererMessagesPage({ currentUser }) {
     conversations, activeConvId, setActiveConvId,
     messages, otherTyping,
     loadingConvs,
-    handleTyping, sendMessage,
+    chatError,
+    handleTyping, sendMessage, createConversation,
     activeConv, otherUser,
-  } = useChat(currentUser?.uid);
- 
-  // Auto-select first conversation
+  } = useChat(currentUser?.id || currentUser?.uid);
+  const selfId = currentUser?.id || currentUser?.uid;
+
   useEffect(() => {
-    if (!activeConvId && conversations.length > 0) {
-      setActiveConvId(conversations[0].id);
+    let alive = true;
+    async function bootstrapActiveClientChat() {
+      if (activeConvId) return;
+      try {
+        const task = await getActiveTask();
+        const clientId = task?.clientId;
+        if (!alive || !clientId) return;
+        const convId = await createConversation(clientId, "customer");
+        if (alive && convId) setActiveConvId(convId);
+      } catch {
+        // fallback to conversation list
+      }
     }
-  }, [conversations]);
+    bootstrapActiveClientChat();
+    return () => { alive = false; };
+  }, [activeConvId, createConversation, setActiveConvId]);
+
+  const pickedInitialRef = useRef(false);
+  useEffect(() => {
+    if (activeConvId) {
+      pickedInitialRef.current = true;
+      return;
+    }
+    if (pickedInitialRef.current) return;
+    if (conversations.length > 0) {
+      setActiveConvId(conversations[0].id);
+      pickedInitialRef.current = true;
+    }
+  }, [conversations, activeConvId, setActiveConvId]);
  
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -65,6 +92,8 @@ export default function DelivererMessagesPage({ currentUser }) {
             <div className="!flex !justify-center !py-8">
               <div className="!w-5 !h-5 !border-2 !border-blue-600/30 !border-t-blue-500 !rounded-full !animate-spin" />
             </div>
+          ) : chatError ? (
+            <p className="!text-[12px] !text-red-300 !text-center !py-8 !m-0 !px-3">{chatError}</p>
           ) : conversations.length === 0 ? (
             <p className="!text-[12px] !text-slate-600 !text-center !py-8 !m-0">No conversations yet</p>
           ) : (
@@ -74,7 +103,7 @@ export default function DelivererMessagesPage({ currentUser }) {
                 conv={conv}
                 isActive={conv.id === activeConvId}
                 onClick={() => setActiveConvId(conv.id)}
-                currentUid={currentUser?.uid}
+                currentUid={selfId}
               />
             ))
           )}
@@ -118,9 +147,9 @@ export default function DelivererMessagesPage({ currentUser }) {
                 <MessageBubble
                   key={msg.id}
                   msg={msg}
-                  isOwn={msg.senderId === currentUser?.uid}
+                  isOwn={msg.senderId === selfId}
                   showAvatar={showAv}
-                  avatarUser={msg.senderId === currentUser?.uid ? currentUser : otherUser}
+                  avatarUser={msg.senderId === selfId ? currentUser : otherUser}
                 />
               );
             })}

@@ -7,6 +7,7 @@ frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
 *.local.env
+.env
 .env.*
 
 # OS / editor

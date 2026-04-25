@@ -2,7 +2,7 @@
 // Install: npm install leaflet react-leaflet
 // Leaflet CSS must be imported in your main entry: import 'leaflet/dist/leaflet.css'
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { MapContainer, TileLayer } from "react-leaflet";
 import {
   MapPin, Bell, CheckCircle2, Clock, TrendingUp,
@@ -12,9 +12,10 @@ import {
 import {
   getSchedule, getIncomingRequests, acceptRequest, rejectRequest,
   getDailySummary, getActiveTask, viewNavigationDetails, switchScheduleTab, getAwaitingClientApprovals,
+  startTransit, markDelivered, cancelActiveDeliveryByDeliverer,
 } from "./FakeApi";
 
-function RequestCard({ request, onAccept, onReject, accepting, rejecting }) {
+function RequestCard({ request, onAccept, onReject, onOpenProfile, accepting, rejecting }) { 
   const isStore = request.customer.type === "store";
 
   return (
@@ -101,6 +102,12 @@ function RequestCard({ request, onAccept, onReject, accepting, rejecting }) {
       </div>
 
       <div className="!flex !items-center !justify-end !gap-3">
+        <button
+          onClick={() => onOpenProfile(request)}
+          style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(173,198,255,0.1)", border: "1px solid rgba(173,198,255,0.28)", color: "#adc6ff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+        >
+          PROFILE
+        </button>
         <button
           onClick={() => onReject(request.id)}
           disabled={rejecting}
@@ -307,6 +314,96 @@ function AwaitingClientQueue({ items }) {
   );
 }
 
+function RequestProfileSheet({ request, onClose, onAccept, onReject, accepting, rejecting }) {
+  if (!request) return null;
+  const data = {
+    id: request?.id || "WS",
+    clientInitial: request?.customer?.avatar || String(request?.customer?.name || "C").slice(0, 1).toUpperCase(),
+    clientName: request?.customer?.name || "Client",
+    payout: Number(request?.payout || 0),
+    currency: "DZD",
+    distance: request?.distance || "~",
+    duration: request?.duration || "~",
+    packageDescription: request?.package?.label || "Package",
+    weight: request?.packageMeta?.weight || "N/A",
+    dimensions: request?.packageMeta?.size || "N/A",
+    fragile: Boolean(request?.packageMeta?.fragile),
+    photo: request?.packageMeta?.photo_name || null,
+    schedule: request?.deliverBy || "Immediate dispatch",
+    pickup: {
+      wilaya: request?.pickup?.wilaya || "—",
+      commune: request?.pickup?.commune || "—",
+      street: request?.pickup?.address || request?.pickup?.label || "",
+    },
+    dropoff: {
+      wilaya: request?.dropoff?.wilaya || "—",
+      commune: request?.dropoff?.commune || "—",
+      street: request?.dropoff?.address || request?.dropoff?.label || "",
+    },
+  };
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 1200, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div style={{ width: "100%", maxWidth: 900, background: "#0f1623", borderRadius: "24px 24px 0 0", border: "1px solid rgba(173,198,255,0.18)", color: "#e2e8f0", overflow: "hidden" }}>
+        <div style={{ padding: 18, background: "linear-gradient(135deg, rgba(173,198,255,0.06), rgba(78,222,163,0.06))", borderBottom: "1px solid rgba(173,198,255,0.12)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 46, height: 46, borderRadius: "50%", background: "linear-gradient(135deg,#ADC6FF,#4EDEA3)", padding: 2 }}>
+                <div style={{ width: "100%", height: "100%", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: "#141c2e", color: "#4EDEA3", fontWeight: 700 }}>
+                  {data.clientInitial}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>Client · {data.clientName}</div>
+                <div style={{ fontSize: 12, color: "rgba(173,198,255,0.6)" }}>Request #{String(data.id).slice(0, 8)} · Just now</div>
+              </div>
+            </div>
+            <div style={{ background: "rgba(78,222,163,0.1)", border: "1px solid rgba(78,222,163,0.3)", borderRadius: 12, padding: "8px 14px" }}>
+              <div style={{ fontSize: 10, color: "rgba(78,222,163,0.7)" }}>Payout</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: "#4EDEA3" }}>{data.payout} <span style={{ fontSize: 11 }}>{data.currency}</span></div>
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: 18, display: "grid", gap: 12 }}>
+          <div style={{ borderRadius: 12, border: "1px solid rgba(173,198,255,0.1)", background: "rgba(173,198,255,0.03)", padding: 12 }}>
+            <div style={{ fontSize: 10, marginBottom: 8, letterSpacing: "0.08em", color: "#ADC6FF" }}>ROUTE</div>
+            <div style={{ fontSize: 13, marginBottom: 6 }}>Pickup: {data.pickup.wilaya} / {data.pickup.commune} / {data.pickup.street || "—"}</div>
+            <div style={{ fontSize: 13 }}>Drop-off: {data.dropoff.wilaya} / {data.dropoff.commune} / {data.dropoff.street || "—"}</div>
+          </div>
+          <div style={{ borderRadius: 12, border: "1px solid rgba(173,198,255,0.1)", background: "rgba(173,198,255,0.03)", padding: 12 }}>
+            <div style={{ fontSize: 10, marginBottom: 8, letterSpacing: "0.08em", color: "#ADC6FF" }}>PACKAGE DETAILS</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ fontSize: 13 }}>Description: {data.packageDescription}</div>
+              <div style={{ fontSize: 13 }}>Weight: {data.weight}</div>
+              <div style={{ fontSize: 13 }}>Dimensions: {data.dimensions}</div>
+              <div style={{ fontSize: 13 }}>Fragile: {data.fragile ? "Yes" : "No"}</div>
+              <div style={{ fontSize: 13, gridColumn: "1 / -1" }}>Photo: {data.photo ? "Photo available" : "No image provided by client"}</div>
+            </div>
+          </div>
+          <div style={{ borderRadius: 12, border: "1px solid rgba(173,198,255,0.1)", background: "rgba(173,198,255,0.03)", padding: 12, fontSize: 13 }}>
+            Preferred pickup schedule: <strong>{data.schedule}</strong>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 12, padding: "0 18px 18px" }}>
+          <button
+            onClick={() => onReject(request.id)}
+            disabled={rejecting}
+            style={{ flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", color: "#94a3b8", borderRadius: 14, padding: 15, fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+          >
+            {rejecting ? "Rejecting..." : "Reject"}
+          </button>
+          <button
+            onClick={() => onAccept(request.id)}
+            disabled={accepting}
+            style={{ flex: 2.2, background: "linear-gradient(135deg, #ADC6FF 0%, #4EDEA3 100%)", border: "none", color: "#0b1220", borderRadius: 14, padding: 15, fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+          >
+            {accepting ? "Accepting..." : "Accept delivery"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ActiveSchedulePage() {
   const [schedule,   setSchedule]   = useState(null);
   const [requests,   setRequests]   = useState([]);
@@ -319,6 +416,9 @@ export default function ActiveSchedulePage() {
   const [rejectingId, setRejectingId] = useState(null);
   const [navLoading,  setNavLoading]  = useState(false);
   const [isMobile,    setIsMobile]    = useState(false);
+  const [profileRequest, setProfileRequest] = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const [cancellingTask, setCancellingTask] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -384,6 +484,7 @@ export default function ActiveSchedulePage() {
       if (result?.phase === "awaiting_client_selection" && result?.request) {
         setAwaitingClient(prev => [result.request, ...prev]);
       }
+      if (profileRequest?.id === id) setProfileRequest(null);
       if (result?.phase === "client_confirmed" && result.orderId) {
         setActiveTask({
           orderId: result.orderId,
@@ -401,6 +502,7 @@ export default function ActiveSchedulePage() {
     try {
       await rejectRequest(id);
       setRequests(prev => prev.filter(r => r.id !== id));
+      if (profileRequest?.id === id) setProfileRequest(null);
     } finally { setRejectingId(null); }
   }
 
@@ -410,6 +512,38 @@ export default function ActiveSchedulePage() {
     await viewNavigationDetails(activeTask.orderId);
     setNavLoading(false);
     navigate(`/deliverer-dashboard/navigation/${activeTask.orderId}`);
+  }
+
+  async function handleAdvanceStatus() {
+    if (!activeTask?.orderId || statusUpdating) return;
+    setStatusUpdating(true);
+    try {
+      const s = String(activeTask.status || "").toLowerCase();
+      if (s.includes("awaiting") || s === "accepted") {
+        await startTransit(activeTask.orderId);
+      } else if (s.includes("transit")) {
+        await markDelivered(activeTask.orderId);
+      }
+      const task = await getActiveTask();
+      setActiveTask(task);
+    } catch (e) {
+      window.alert(e?.response?.data?.message || e?.message || "Could not update status.");
+    } finally {
+      setStatusUpdating(false);
+    }
+  }
+
+  async function handleCancelTask() {
+    if (!activeTask?.orderId || cancellingTask) return;
+    setCancellingTask(true);
+    try {
+      await cancelActiveDeliveryByDeliverer(activeTask.orderId);
+      setActiveTask(null);
+    } catch (e) {
+      window.alert(e?.response?.data?.message || e?.message || "Cancel failed.");
+    } finally {
+      setCancellingTask(false);
+    }
   }
 
   if (loading) return (
@@ -426,13 +560,15 @@ export default function ActiveSchedulePage() {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Zone Map */}
       <div style={{ borderRadius: 16, overflow: "hidden", border: "1px solid #1e2d3d", height: 180 }}>
-        <MapContainer
-          center={[36.74, 3.05]} zoom={11}
-          style={{ width: "100%", height: "100%", background: "#0b1525" }}
-          zoomControl={false} attributionControl={false} dragging={false} scrollWheelZoom={false}
-        >
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
-        </MapContainer>
+        {useMemo(() => (
+          <MapContainer
+            center={[36.74, 3.05]} zoom={11}
+            style={{ width: "100%", height: "100%", background: "#0b1525" }}
+            zoomControl={false} attributionControl={false} dragging={false} scrollWheelZoom={false}
+          >
+            <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+          </MapContainer>
+        ), [])}
         <div style={{ position: "relative", marginTop: -60, marginLeft: 10, background: "rgba(11,21,37,0.88)", backdropFilter: "blur(6px)", borderRadius: 10, padding: "8px 12px", width: "fit-content", border: "1px solid #1e2d3d" }}>
           <div className="!flex !items-center !gap-1.5 !mb-1">
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#2563eb" }} />
@@ -467,8 +603,10 @@ export default function ActiveSchedulePage() {
         <div style={{ background: "#111c2e", border: "1px solid #1e2d3d", borderRadius: 16, padding: 16, position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", top: 0, right: 0, background: "#2563eb", borderRadius: "0 16px 0 12px", padding: "4px 12px", fontSize: 10, fontWeight: 700, color: "white" }}>ONGOING</div>
           <p style={{ fontSize: 9, fontWeight: 700, color: "#475569", letterSpacing: "0.1em", margin: "0 0 8px" }}>ACTIVE TASK</p>
-          <p style={{ fontSize: 20, fontWeight: 800, color: "white", margin: "0 0 10px" }}>Order #{activeTask.orderId}</p>
-          <span style={{ background: "rgba(234,179,8,0.12)", color: "#eab308", border: "1px solid rgba(234,179,8,0.25)", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, display: "inline-block", marginBottom: 12 }}>AWAITING PICKUP</span>
+          <p style={{ fontSize: 20, fontWeight: 800, color: "white", margin: "0 0 10px" }}>{activeTask.clientName || "Client"}</p>
+          <span style={{ background: "rgba(234,179,8,0.12)", color: "#eab308", border: "1px solid rgba(234,179,8,0.25)", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, display: "inline-block", marginBottom: 12 }}>
+            {String(activeTask.status || "Awaiting Pickup").toUpperCase()}
+          </span>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Clock size={13} color="#64748b" />
@@ -490,6 +628,26 @@ export default function ActiveSchedulePage() {
               ? <span style={{ width: 13, height: 13, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#60a5fa", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
               : <><Navigation size={13} /> VIEW NAVIGATION <ExternalLink size={11} /></>
             }
+          </button>
+          <button
+            onClick={handleAdvanceStatus}
+            disabled={statusUpdating || String(activeTask.status || "").toLowerCase().includes("delivered")}
+            style={{ width: "100%", marginTop: 8, padding: "10px 0", borderRadius: 10, background: "linear-gradient(135deg,#4EDEA3,#ADC6FF)", border: "none", color: "#0b1525", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: statusUpdating ? 0.7 : 1 }}
+          >
+            {statusUpdating
+              ? "Updating..."
+              : String(activeTask.status || "").toLowerCase().includes("awaiting")
+              ? "Start Transit"
+              : String(activeTask.status || "").toLowerCase().includes("transit")
+              ? "Mark Delivered"
+              : "Delivered"}
+          </button>
+          <button
+            onClick={handleCancelTask}
+            disabled={cancellingTask || !String(activeTask.status || "").toLowerCase().includes("awaiting")}
+            style={{ width: "100%", marginTop: 8, padding: "10px 0", borderRadius: 10, background: "transparent", border: "1px solid rgba(248,113,113,0.35)", color: "#f87171", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: cancellingTask ? 0.7 : 1 }}
+          >
+            {cancellingTask ? "Cancelling..." : "Cancel Delivery"}
           </button>
         </div>
       )}
@@ -559,7 +717,7 @@ export default function ActiveSchedulePage() {
               </p>
             </div>
           ) : requests.map(req => (
-            <RequestCard key={req.id} request={req} onAccept={handleAccept} onReject={handleReject} accepting={acceptingId === req.id} rejecting={rejectingId === req.id} />
+            <RequestCard key={req.id} request={req} onOpenProfile={setProfileRequest} onAccept={handleAccept} onReject={handleReject} accepting={acceptingId === req.id} rejecting={rejectingId === req.id} />
           ))}
         </div>
       ) : (
@@ -592,7 +750,7 @@ export default function ActiveSchedulePage() {
                 </p>
               </div>
             ) : requests.map(req => (
-              <RequestCard key={req.id} request={req} onAccept={handleAccept} onReject={handleReject} accepting={acceptingId === req.id} rejecting={rejectingId === req.id} />
+              <RequestCard key={req.id} request={req} onOpenProfile={setProfileRequest} onAccept={handleAccept} onReject={handleReject} accepting={acceptingId === req.id} rejecting={rejectingId === req.id} />
             ))}
           </div>
           {/* Right */}
@@ -601,6 +759,14 @@ export default function ActiveSchedulePage() {
           </div>
         </div>
       )}
+      <RequestProfileSheet
+        request={profileRequest}
+        onClose={() => setProfileRequest(null)}
+        onAccept={handleAccept}
+        onReject={handleReject}
+        accepting={acceptingId === profileRequest?.id}
+        rejecting={rejectingId === profileRequest?.id}
+      />
     </div>
   );
 }

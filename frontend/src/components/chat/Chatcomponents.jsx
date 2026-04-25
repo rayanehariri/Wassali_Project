@@ -1,4 +1,4 @@
-import { Check, CheckCheck, MapPin, Download } from "lucide-react";
+import { Check, CheckCheck, MapPin, Download, Mic, Plus, Send } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatTime, timeAgo } from "../../hooks/Usechat";
  
@@ -211,8 +211,6 @@ export function ConvItem({ conv, isActive, onClick, currentUid, variant = "defau
  
 // ── Message input bar ─────────────────────────────────────────────────────────
 export function MessageInput({ value, onChange, onSend, onTyping, placeholder = "Type a message...", showAttach = true }) {
-  const { Mic, Plus, Paperclip, Send } = require("lucide-react");
- 
   function handleKey(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
   }

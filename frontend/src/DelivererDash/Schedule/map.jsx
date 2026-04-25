@@ -2,7 +2,7 @@
 // Install: npm install leaflet react-leaflet
 // Leaflet CSS must be imported in your main entry: import 'leaflet/dist/leaflet.css'
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Phone, Navigation, MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
@@ -122,10 +122,16 @@ export default function DelivererMapPage() {
     if (!order) return;
     setCompleting(true);
     try {
-      await http.post(`/deliverer/deliveries/mark_delivered/${order.id}`);
-      // Refresh UI: no active order after completion
-      setOrder(null);
-      window.alert("Delivery marked as completed. You can accept another request now.");
+      const normalized = String(order.status || "").toLowerCase();
+      if (normalized.includes("awaiting") || normalized === "accepted") {
+        await http.post(`/deliverer/deliveries/start_transit/${order.id}`);
+        setOrder((prev) => (prev ? { ...prev, status: "in_transit" } : prev));
+        window.alert("Status updated to In Transit.");
+      } else {
+        await http.post(`/deliverer/deliveries/mark_delivered/${order.id}`);
+        setOrder(null);
+        window.alert("Delivery marked as completed. You can accept another request now.");
+      }
     } catch (e) {
       window.alert(e.response?.data?.message || e.message || "Could not complete delivery.");
     } finally {
@@ -133,9 +139,10 @@ export default function DelivererMapPage() {
     }
   }
 
-  const routeCoords = order
-    ? [order.pickup.coords, order.dropoff.coords]
-    : [];
+  const routeCoords = useMemo(
+    () => (order ? [order.pickup.coords, order.dropoff.coords] : []),
+    [order?.pickup?.coords, order?.dropoff?.coords]
+  );
 
   const mapCenter = order
     ? [
@@ -316,7 +323,7 @@ export default function DelivererMapPage() {
             }}
             title="Mark this delivery as completed"
           >
-            {completing ? "Completing..." : "Mark Delivered ✓"}
+            {completing ? "Updating..." : String(order.status || "").toLowerCase().includes("awaiting") || String(order.status || "").toLowerCase() === "accepted" ? "Start Transit" : "Mark Delivered ✓"}
           </button>
         </div>
       )}

@@ -3,7 +3,7 @@
 // Removed: top-left "Recent Deliverers" and "Chat" buttons
 // DelivererHistory accessible via sidebar "View History" link
 // ═══════════════════════════════════════════════════════════
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import { Badge, TopBar } from './Shared';
 import { http } from '../api/http';
 
@@ -19,7 +19,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function LeafletMap({ order }) {
+function LeafletMap({ order, mapSig }) {
   const mapRef = useRef(null);
   const mapObj = useRef(null);
   const layersRef = useRef(null);
@@ -71,22 +71,60 @@ function LeafletMap({ order }) {
         iconSize:[14,14], iconAnchor:[7,7],
       });
 
-      const pickup  = order.pickupCoords || [order.lat+0.02, order.lng-0.03];
-      const dest    = order.dropoffCoords || [order.lat-0.01, order.lng+0.04];
-      const courier = order.courierCoords || [(pickup[0] + dest[0]) / 2, (pickup[1] + dest[1]) / 2];
+      const pickup = Array.isArray(order.pickupCoords) && order.pickupCoords.length >= 2 ? order.pickupCoords : null;
+      const dest = Array.isArray(order.dropoffCoords) && order.dropoffCoords.length >= 2 ? order.dropoffCoords : null;
+      const hasCourier =
+        Boolean(order.delivererId) &&
+        Array.isArray(order.courierCoords) &&
+        order.courierCoords.length >= 2;
+      const courier = hasCourier ? order.courierCoords : null;
 
-      L.marker(pickup,  { icon:mk('#4ade80','rgba(74,222,128,.8)')  }).addTo(layers).bindPopup(`<b>Pickup:</b> ${escapeHtml(order.from)}`);
-      L.marker(dest,    { icon:mk('#f87171')                         }).addTo(layers).bindPopup(`<b>Destination:</b> ${escapeHtml(order.to)}`);
-      L.marker(courier, { icon:mk('#3b82f6','rgba(59,130,246,.9)') }).addTo(layers).bindPopup(`<b>Courier:</b> ${escapeHtml(order.courier)}`);
-      L.polyline([pickup,courier,dest], { color:'#3b82f6', weight:3, opacity:0.7, dashArray:'8 5' }).addTo(layers);
-      map.fitBounds([pickup,dest], { padding:[50,50] });
+      if (pickup) {
+        L.marker(pickup, { icon: mk('#4ade80', 'rgba(74,222,128,.8)') }).addTo(layers).bindPopup(`<b>Pickup:</b> ${escapeHtml(order.from)}`);
+      }
+      if (dest) {
+        L.marker(dest, { icon: mk('#f87171') }).addTo(layers).bindPopup(`<b>Destination:</b> ${escapeHtml(order.to)}`);
+      }
+      if (courier) {
+        L.marker(courier, { icon: mk('#3b82f6', 'rgba(59,130,246,.9)') }).addTo(layers).bindPopup(`<b>Courier:</b> ${escapeHtml(order.courier)}`);
+      }
+
+      const linePts = [pickup, courier, dest].filter(Boolean);
+      if (linePts.length >= 2) {
+        L.polyline(linePts, { color: '#3b82f6', weight: 3, opacity: 0.7, dashArray: '8 5' }).addTo(layers);
+        try {
+          map.fitBounds(linePts, { padding: [50, 50], animate: false });
+        } catch {
+          map.setView(linePts[0], 13, { animate: false });
+        }
+      } else if (linePts.length === 1) {
+        map.setView(linePts[0], 13, { animate: false });
+      } else {
+        map.setView([36.737, 3.086], 12, { animate: false });
+      }
     });
-  }, [order]);
+  }, [mapSig]);
 
   return <div ref={mapRef} style={{ position:'absolute', inset:0, width:'100%', height:'100%', zIndex:1 }}/>;
 }
 
-export default function PageTrack({ onNewDelivery, onSettings, startPanel = null, setActive, addToast, currentUser, orderId = null }) {
+function haversineKm(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return null;
+  const toRad = (v) => (v * Math.PI) / 180;
+  const [lat1, lon1] = a;
+  const [lat2, lon2] = b;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const rLat1 = toRad(lat1);
+  const rLat2 = toRad(lat2);
+  const h =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(rLat1) * Math.cos(rLat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  return 6371 * c;
+}
+
+export default function PageTrack({ onNewDelivery, onSettings, startPanel = null, startChatDeliverer = null, setActive, addToast, currentUser, orderId = null }) {
   const [order, setOrder] = useState(null);
   const [panel, setPanel] = useState(null); // null | 'history' | 'chat'
   const [loadingOrder, setLoadingOrder] = useState(true);
@@ -98,27 +136,77 @@ export default function PageTrack({ onNewDelivery, onSettings, startPanel = null
     const desc = delivery.description_of_order || 'Delivery';
     const pickupCoords = Array.isArray(delivery.pickup_coords) ? delivery.pickup_coords : null;
     const dropoffCoords = Array.isArray(delivery.dropoff_coords) ? delivery.dropoff_coords : null;
+    const normalizedStatus = String(delivery.status || '').toLowerCase();
+    const isDelivered = normalizedStatus === 'delivered';
+    const isAwaitingPickup = normalizedStatus === 'accepted';
+    const isInTransit = normalizedStatus === 'in_transit';
+    const courierCoords = Array.isArray(delivery.deliverer_coords)
+      ? delivery.deliverer_coords
+      : Array.isArray(delivery.courier_coords)
+        ? delivery.courier_coords
+        : null;
     return {
+      deliveryId: String(delivery._id || ''),
       id: `#${String(delivery._id || '').slice(0, 8)}`,
-      status: (delivery.status || '').toLowerCase() === 'delivered'
-        ? 'completed'
-        : (delivery.status || '').toLowerCase() === 'accepted'
-        ? 'in_transit'
-        : String(delivery.status || ''),
+      status: isDelivered ? 'completed' : isInTransit ? 'in_transit' : 'active',
+      rawStatus: normalizedStatus,
+      statusLabel: isDelivered ? 'Delivered' : isInTransit ? 'In Transit' : isAwaitingPickup ? 'Awaiting Pickup' : String(delivery.status || ''),
       title: desc,
-      courier: delivery.deliverer_name || 'Assigned Deliverer',
+      courier: delivery.deliverer_name || (delivery.deliverer_id ? 'Assigned Deliverer' : 'Finding a deliverer…'),
+      delivererId: delivery.deliverer_id || delivery.delivererId || null,
       client: delivery.client_name || 'Client',
-      av: 'DL',
-      eta: 'Live',
-      pct: 72,
+      av: (delivery.deliverer_name || 'DL').split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase(),
+      eta: isDelivered ? 'Delivered' : isInTransit ? 'In Transit' : 'Awaiting Pickup',
+      pct: isDelivered ? 100 : isInTransit ? 72 : 35,
       from: pickup,
       to: dropoff,
-      lat: 36.742,
-      lng: 3.038,
       pickupCoords,
       dropoffCoords,
+      courierCoords,
     };
   }
+
+  function sameTrackOrder(a, b) {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    return (
+      a.deliveryId === b.deliveryId &&
+      a.rawStatus === b.rawStatus &&
+      String(a.delivererId || '') === String(b.delivererId || '') &&
+      JSON.stringify(a.pickupCoords) === JSON.stringify(b.pickupCoords) &&
+      JSON.stringify(a.dropoffCoords) === JSON.stringify(b.dropoffCoords) &&
+      JSON.stringify(a.courierCoords) === JSON.stringify(b.courierCoords) &&
+      a.from === b.from &&
+      a.to === b.to &&
+      a.courier === b.courier
+    );
+  }
+  const distanceKmRaw = order ? haversineKm(order.pickupCoords, order.dropoffCoords) : null;
+  const distanceKm = distanceKmRaw ? `${distanceKmRaw.toFixed(1)} km` : '—';
+
+  const mapSig = useMemo(() => {
+    if (!order) return '';
+    return [
+      order.deliveryId,
+      order.rawStatus,
+      order.delivererId || '',
+      JSON.stringify(order.pickupCoords),
+      JSON.stringify(order.dropoffCoords),
+      JSON.stringify(order.courierCoords),
+    ].join('|');
+  }, [order]);
+
+  async function handleCancel() {
+    if (!order?.deliveryId) return;
+    try {
+      await http.post(`/client/deliveries/cancel/${order.deliveryId}`);
+      setOrder(null);
+      addToast?.('success', 'Delivery cancelled', 'Your delivery has been cancelled.');
+    } catch (e) {
+      addToast?.('error', 'Cancel failed', e?.response?.data?.message || e?.message || 'Could not cancel delivery.');
+    }
+  }
+
 
   useEffect(() => {
     if (startPanel) setPanel(startPanel);
@@ -127,7 +215,7 @@ export default function PageTrack({ onNewDelivery, onSettings, startPanel = null
   useEffect(() => {
     let alive = true;
     async function loadOrder() {
-      setLoadingOrder(true);
+      if (!order) setLoadingOrder(true);
       try {
         let res;
         if (orderId) {
@@ -137,7 +225,8 @@ export default function PageTrack({ onNewDelivery, onSettings, startPanel = null
         }
         const delivery = res?.data?.delivery ?? res?.data?.data?.delivery ?? null;
         if (!alive) return;
-        setOrder(toTrackOrder(delivery));
+        const nextOrder = toTrackOrder(delivery);
+        setOrder((prev) => (sameTrackOrder(prev, nextOrder) ? prev : nextOrder));
       } catch {
         if (!alive) return;
         setOrder(null);
@@ -146,7 +235,11 @@ export default function PageTrack({ onNewDelivery, onSettings, startPanel = null
       }
     }
     loadOrder();
-    return () => { alive = false; };
+    const timer = setInterval(loadOrder, 3000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
   }, [orderId]);
 
   if (panel === 'history') {
@@ -158,24 +251,20 @@ export default function PageTrack({ onNewDelivery, onSettings, startPanel = null
       <TopBar placeholder="Search deliveries, tracking IDs..." onSettings={onSettings} setActive={setActive} addToast={addToast} currentUser={currentUser} />
 
       <div style={{ position:'relative', flex:1, minHeight:'calc(100vh - 57px)', overflow:'hidden' }}>
-        <LeafletMap order={order}/>
+        <LeafletMap order={order} mapSig={mapSig} />
 
         {/* Distance badge — top right only */}
         <div style={{ position:'absolute', top:16, right:16, zIndex:999, display:'flex', alignItems:'center', gap:6, background:'rgba(11,30,56,.92)', border:'1px solid rgba(255,255,255,.1)', borderRadius:10, padding:'6px 12px' }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           <span style={{ fontSize:11, color:'rgba(255,255,255,.45)', fontFamily:"'DM Sans',system-ui,sans-serif" }}>DISTANCE</span>
-          <span style={{ fontSize:12, fontWeight:700, color:'white', fontFamily:"'DM Sans',system-ui,sans-serif" }}>3.2 km</span>
+          <span style={{ fontSize:12, fontWeight:700, color:'white', fontFamily:"'DM Sans',system-ui,sans-serif" }}>{distanceKm}</span>
         </div>
 
         {/* Delivery info card */}
         {order && (
           <div className="cd-track-floating-card" style={{ background:'rgba(9,22,42,.96)', border:'1px solid rgba(255,255,255,.1)', borderRadius:18, backdropFilter:'blur(8px)', padding:16 }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-              <Badge status="in_transit"/>
-              <div style={{ textAlign:'right' }}>
-                <p style={{ margin:'0 0 2px', fontSize:9, color:'rgba(255,255,255,.3)', letterSpacing:'0.1em', fontFamily:"'DM Sans',system-ui,sans-serif" }}>ETA</p>
-                <p style={{ margin:0, fontSize:22, fontWeight:700, color:'white', fontFamily:"'Outfit',system-ui,sans-serif", lineHeight:1 }}>{order.eta}</p>
-              </div>
+              <Badge status={order.status === 'completed' ? 'completed' : order.status === 'in_transit' ? 'in_transit' : 'active'} label={order.statusLabel?.toUpperCase()}/>
             </div>
             <h3 style={{ margin:'0 0 2px', fontSize:15, fontWeight:700, color:'white', fontFamily:"'Outfit',system-ui,sans-serif" }}>{order.title}</h3>
             <p style={{ margin:'0 0 12px', fontSize:10, color:'rgba(255,255,255,.35)', fontFamily:"'JetBrains Mono',monospace" }}>Order {order.id}</p>
@@ -223,6 +312,13 @@ export default function PageTrack({ onNewDelivery, onSettings, startPanel = null
             {/* View Deliverer History link */}
             <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid rgba(255,255,255,.06)' }}>
               <button
+                onClick={handleCancel}
+                disabled={order.rawStatus !== 'accepted'}
+                style={{ background:'none', border:'1px solid rgba(248,113,113,.35)', borderRadius:8, fontSize:11, color:'#f87171', cursor: order.rawStatus === 'accepted' ? 'pointer' : 'not-allowed', fontFamily:"'DM Sans',system-ui,sans-serif", display:'flex', alignItems:'center', gap:5, padding:'6px 10px', width:'100%', justifyContent:'center', marginBottom:8, opacity: order.rawStatus === 'accepted' ? 1 : 0.5 }}
+              >
+                Cancel delivery
+              </button>
+              <button
                 onClick={() => setPanel('history')}
                 style={{ background:'none', border:'none', fontSize:11, color:'#60a5fa', cursor:'pointer', fontFamily:"'DM Sans',system-ui,sans-serif", display:'flex', alignItems:'center', gap:5, padding:0, width:'100%', justifyContent:'center' }}
                 onMouseEnter={e => e.currentTarget.style.opacity='0.7'}
@@ -244,7 +340,16 @@ export default function PageTrack({ onNewDelivery, onSettings, startPanel = null
         )}
       </div>
 
-      {panel === 'chat' && <TrackChatPanel onClose={() => setPanel(null)}/>}
+      {panel === 'chat' && (
+        <TrackChatPanel
+          deliverer={
+            order?.delivererId
+              ? { deliverer_id: order.delivererId, name: order?.courier }
+              : (startChatDeliverer ? { deliverer_id: startChatDeliverer.id, name: startChatDeliverer.name } : null)
+          }
+          onClose={() => setPanel(null)}
+        />
+      )}
     </div>
   );
 }

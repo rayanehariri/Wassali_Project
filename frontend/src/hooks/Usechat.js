@@ -2,9 +2,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   collection, query, orderBy, onSnapshot,
   addDoc, updateDoc, doc, serverTimestamp,
-  where, getDocs, setDoc, getDoc,
+  where, getDocs, setDoc, getDoc, limit,
 } from "firebase/firestore";
-import { db } from "../Firebase.config"; // ← adjust path
+import { auth, db } from "../Firebase.config"; // ← adjust path
+import { http } from "../api/http";
  
 // ── helpers ───────────────────────────────────────────────────────────────────
 export function timeAgo(ts) {
@@ -32,36 +33,111 @@ export function useChat(currentUidProp) {
   const [otherTyping,    setOtherTyping]    = useState(false);
   const [loadingConvs,   setLoadingConvs]   = useState(true);
   const [loadingMsgs,    setLoadingMsgs]    = useState(false);
-   const currentUid = currentUidProp ?? null;
+  const [chatError,      setChatError]      = useState("");
+  let resolvedUid = currentUidProp ?? auth.currentUser?.uid ?? null;
+  if (!resolvedUid) {
+    try {
+      const raw = localStorage.getItem("currentUser");
+      const parsed = raw ? JSON.parse(raw) : null;
+      resolvedUid = parsed?.uid || parsed?.id || null;
+    } catch {}
+  }
+  // Prefer backend user id for deterministic client<->deliverer chats.
+  try {
+    const raw = localStorage.getItem("currentUser");
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed?.id) resolvedUid = parsed.id;
+  } catch {}
+  const currentUid = resolvedUid;
  
   const typingTimerRef = useRef(null);
+
+  const buildInitials = useCallback((name, fallback = "U") => {
+    const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return String(fallback || "U").slice(0, 2).toUpperCase();
+  }, []);
+
+  const resolveUserProfile = useCallback(async (uidLike) => {
+    const fallbackName = `User ${String(uidLike || "").slice(0, 6)}`;
+    try {
+      const direct = await getDoc(doc(db, "users", uidLike));
+      if (direct.exists()) {
+        const data = direct.data() || {};
+        const name = data.name || data.username || fallbackName;
+        return {
+          uid: uidLike,
+          ...data,
+          name,
+          avatar: data.avatar || buildInitials(name, uidLike),
+        };
+      }
+    } catch {}
+
+    // Conversations currently use Mongo ids; users docs are keyed by Firebase uid.
+    try {
+      const q = query(collection(db, "users"), where("mongoId", "==", uidLike), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const match = snap.docs[0];
+        const data = match.data() || {};
+        const name = data.name || data.username || fallbackName;
+        return {
+          uid: uidLike,
+          ...data,
+          firebaseUid: match.id,
+          name,
+          avatar: data.avatar || buildInitials(name, uidLike),
+        };
+      }
+    } catch {}
+
+    try {
+      const res = await http.get(`/auth/peer/${encodeURIComponent(uidLike)}/`);
+      const u = res?.data?.user ?? res?.data?.data?.user;
+      if (u) {
+        const name = u.name || u.username || fallbackName;
+        return {
+          uid: uidLike,
+          mongoId: u._id,
+          name,
+          avatar: buildInitials(name, uidLike),
+          role: u.role,
+        };
+      }
+    } catch {}
+
+    return { uid: uidLike, name: fallbackName, avatar: buildInitials(fallbackName, uidLike) };
+  }, [buildInitials]);
  
   // ── 1. Listen to conversations ─────────────────────────────────────────────
   useEffect(() => {
-    if (!currentUid) return;
+    if (!currentUid) {
+      setLoadingConvs(false);
+      setConversations([]);
+      setChatError("Missing user uid for chat session.");
+      return;
+    }
     setLoadingConvs(true);
+    setChatError("");
  
-    const q = query(
+    const orderedQuery = query(
       collection(db, "conversations"),
       where("participants", "array-contains", currentUid),
       orderBy("lastMessageAt", "desc")
     );
+    const fallbackQuery = query(
+      collection(db, "conversations"),
+      where("participants", "array-contains", currentUid)
+    );
  
-    const unsub = onSnapshot(q, async (snap) => {
-      const convs = await Promise.all(snap.docs.map(async (d) => {
-        const data = d.data();
+    async function mapConvs(docs) {
+      const convs = await Promise.all(docs.map(async (d) => {
+        const data = d.data ? d.data() : d;
  
         // fetch participant profiles
-        const profiles = await Promise.all(
-          (data.participants ?? []).map(async (uid) => {
-            try {
-              const userDoc = await getDoc(doc(db, "users", uid));
-              return userDoc.exists()
-                ? { uid, ...userDoc.data() }
-                : { uid, name: uid.slice(0, 8), avatar: "??" };
-            } catch { return { uid, name: "User", avatar: "??" }; }
-          })
-        );
+        const profiles = await Promise.all((data.participants ?? []).map(resolveUserProfile));
  
         const otherId = data.participants?.find(p => p !== currentUid);
         return {
@@ -72,12 +148,64 @@ export function useChat(currentUidProp) {
           isTyping:        data.typing?.[otherId] ?? false,
         };
       }));
- 
-      setConversations(convs);
+      convs.sort((a, b) => {
+        const aTs = a?.lastMessageAt?.toMillis?.() ?? 0;
+        const bTs = b?.lastMessageAt?.toMillis?.() ?? 0;
+        return bTs - aTs;
+      });
+      // One thread per counterparty (avoids duplicate rows for the same deliverer/client).
+      const byOther = new Map();
+      for (const c of convs) {
+        const oid = c.otherUser?.uid ?? c.participants?.find((p) => p !== currentUid);
+        if (!oid) continue;
+        const prev = byOther.get(oid);
+        if (!prev) {
+          byOther.set(oid, c);
+          continue;
+        }
+        const pTs = prev?.lastMessageAt?.toMillis?.() ?? 0;
+        const nTs = c?.lastMessageAt?.toMillis?.() ?? 0;
+        if (nTs >= pTs) byOther.set(oid, c);
+      }
+      const deduped = [...byOther.values()].sort((a, b) => {
+        const aTs = a?.lastMessageAt?.toMillis?.() ?? 0;
+        const bTs = b?.lastMessageAt?.toMillis?.() ?? 0;
+        return bTs - aTs;
+      });
+      setConversations(deduped);
       setLoadingConvs(false);
-    });
- 
-    return () => unsub();
+    }
+
+    let unsub = () => {};
+    unsub = onSnapshot(
+      orderedQuery,
+      async (snap) => {
+        setChatError("");
+        await mapConvs(snap.docs);
+      },
+      (err) => {
+        const msg = String(err?.message || "");
+        // Missing index is common on first setup: retry with simpler query.
+        if (msg.includes("index") || msg.includes("failed-precondition")) {
+          unsub = onSnapshot(
+            fallbackQuery,
+            async (snap) => {
+              setChatError("");
+              await mapConvs(snap.docs);
+            },
+            () => {
+              setChatError("Chat conversations failed to load.");
+              setLoadingConvs(false);
+            }
+          );
+          return;
+        }
+        setChatError("Chat conversations failed to load.");
+        setLoadingConvs(false);
+      }
+    );
+
+    return () => { try { unsub(); } catch {} };
   }, [currentUid]);
  
   // ── 2. Listen to messages ──────────────────────────────────────────────────
@@ -174,16 +302,28 @@ export function useChat(currentUidProp) {
  
   // ── 6. Create a conversation ───────────────────────────────────────────────
   const createConversation = useCallback(async (otherUid, type = "customer") => {
-    // check if conversation already exists
+    if (!currentUid || !otherUid) return null;
     const q = query(
       collection(db, "conversations"),
       where("participants", "array-contains", currentUid),
-      where("type", "==", type)
     );
     const snap = await getDocs(q);
-    const existing = snap.docs.find(d =>
-      d.data().participants?.includes(otherUid)
-    );
+    const matches = snap.docs.filter((d) => {
+      const data = d.data() || {};
+      const p = data.participants || [];
+      const typeOk = !data.type || data.type === type;
+      return p.includes(otherUid) && typeOk;
+    });
+    let existing = null;
+    let bestTs = -1;
+    for (const d of matches) {
+      const lm = d.data()?.lastMessageAt;
+      const ts = lm?.toMillis?.() ?? 0;
+      if (ts >= bestTs) {
+        bestTs = ts;
+        existing = d;
+      }
+    }
     if (existing) {
       setActiveConvId(existing.id);
       return existing.id;
@@ -213,6 +353,7 @@ export function useChat(currentUidProp) {
     conversations, activeConvId, setActiveConvId,
     messages, otherTyping,
     loadingConvs, loadingMsgs,
+    chatError,
     handleTyping, sendMessage, createConversation,
     activeConv, otherUser, unreadTotal,
   };

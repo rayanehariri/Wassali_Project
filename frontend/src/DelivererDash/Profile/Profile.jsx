@@ -217,7 +217,7 @@ export default function ProfilePage() {
                 {/* ELITE PARTNER */}
                 <span className="!flex !items-center !gap-1 !px-2.5 !py-0.5 !rounded-full !text-[10px] !font-bold !tracking-wide"
                   style={{ background: "rgba(37,99,235,0.18)", color: "#60a5fa", border: "1px solid rgba(37,99,235,0.35)" }}>
-                  ✦ {(profile?.badge ?? "Elite Partner").toUpperCase()}
+                  ✦ {(profile?.badge || "Partner").toUpperCase()}
                 </span>
                 {/* VERIFIED */}
                 {profile?.verified && (

@@ -41,12 +41,15 @@ function LeafletMap({ deliverers, selectedId, pickup, dropoff }) {
       L.control.zoom({ position:'topright' }).addTo(map);
       mapObj.current = map;
 
+      const pickupCoords = Array.isArray(pickup?.coords) ? pickup.coords : [36.758, 3.048];
+      const dropoffCoords = Array.isArray(dropoff?.coords) ? dropoff.coords : [36.742, 3.068];
       const pickupIcon = L.divIcon({ className:'', html:`<div style="width:14px;height:14px;border-radius:50%;background:#4EDEA3;border:2.5px solid #0e3a4a;box-shadow:0 0 10px rgba(78,222,163,0.8)"></div>`, iconSize:[14,14], iconAnchor:[7,7] });
-      L.marker([36.758,3.048], { icon:pickupIcon }).addTo(map).bindPopup(`<b>Pickup:</b> ${escapeHtml(pickup || 'Your location')}`);
+      L.marker(pickupCoords, { icon:pickupIcon }).addTo(map).bindPopup(`<b>Pickup:</b> ${escapeHtml(pickup?.address || 'Your location')}`);
 
       const dropoffIcon = L.divIcon({ className:'', html:`<div style="width:14px;height:14px;border-radius:50%;background:#ADC6FF;border:2.5px solid #0e3a4a;box-shadow:0 0 10px rgba(173,198,255,0.8)"></div>`, iconSize:[14,14], iconAnchor:[7,7] });
-      L.marker([36.742,3.068], { icon:dropoffIcon }).addTo(map).bindPopup(`<b>Drop-off:</b> ${escapeHtml(dropoff || 'Destination')}`);
-      L.polyline([[36.758,3.048],[36.742,3.068]], { color:'#ADC6FF', weight:2.5, opacity:0.5, dashArray:'8 5' }).addTo(map);
+      L.marker(dropoffCoords, { icon:dropoffIcon }).addTo(map).bindPopup(`<b>Drop-off:</b> ${escapeHtml(dropoff?.address || 'Destination')}`);
+      L.polyline([pickupCoords, dropoffCoords], { color:'#ADC6FF', weight:2.5, opacity:0.5, dashArray:'8 5' }).addTo(map);
+      map.fitBounds([pickupCoords, dropoffCoords], { padding: [40, 40] });
     }
 
     function ensureLeaflet() {
@@ -61,7 +64,7 @@ function LeafletMap({ deliverers, selectedId, pickup, dropoff }) {
 
     ensureLeaflet();
     return () => { if (mapObj.current) { mapObj.current.remove(); mapObj.current = null; } };
-  }, []);
+  }, [pickup, dropoff]);
 
   useEffect(() => {
     if (!mapObj.current || !window.L || !deliverers.length) return;
@@ -414,7 +417,12 @@ export default function ChooseDelivererPage({ deliveryData, onNext, onBack }) {
 
       {/* ── RIGHT — map ── */}
       <div style={{ position:'relative' }}>
-        <LeafletMap deliverers={deliverers} selectedId={selected} pickup={deliveryData?.pickup} dropoff={deliveryData?.dropoff}/>
+        <LeafletMap
+          deliverers={deliverers}
+          selectedId={selected}
+          pickup={{ address: deliveryData?.pickup, coords: deliveryData?.pickupCoords }}
+          dropoff={{ address: deliveryData?.dropoff, coords: deliveryData?.dropoffCoords }}
+        />
         <div style={{ position:'absolute', bottom:20, left:20, zIndex:999, background:'rgba(7,24,40,0.95)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:12, padding:'10px 14px', backdropFilter:'blur(8px)' }}>
           <p style={{ margin:'0 0 8px', fontSize:9, fontWeight:700, color:'rgba(255,255,255,0.35)', letterSpacing:'0.1em', fontFamily:"'DM Sans',system-ui,sans-serif" }}>MAP LEGEND</p>
           {[{ color:'#4EDEA3', label:'Pickup point' },{ color:'#ADC6FF', label:'Drop-off point' },{ color:'white', label:'Deliverer' }].map(l => (

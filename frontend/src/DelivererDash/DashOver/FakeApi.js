@@ -25,7 +25,7 @@ const fakeRecentDeliveries = [
  */
 export async function getDelivererStats() {
   const res = await http.get("/deliverer/stats");
-  return res?.data?.data ?? fakeDelivererStats;
+  return res?.data?.data ?? res?.data ?? fakeDelivererStats;
 }
 
 /**
@@ -34,7 +34,7 @@ export async function getDelivererStats() {
  */
 export async function getDelivererNotifications() {
   const res = await http.get("/deliverer/notifications");
-  return res?.data?.data?.notifications ?? fakeNotifications;
+  return res?.data?.notifications ?? res?.data?.data?.notifications ?? fakeNotifications;
 }
 
 /**
@@ -43,7 +43,7 @@ export async function getDelivererNotifications() {
  */
 export async function getRecentDeliveries() {
   const res = await http.get("/deliverer/deliveries/recent");
-  return res?.data?.data?.deliveries ?? fakeRecentDeliveries;
+  return res?.data?.deliveries ?? res?.data?.data?.deliveries ?? fakeRecentDeliveries;
 }
 
 /**

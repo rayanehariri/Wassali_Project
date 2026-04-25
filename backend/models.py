@@ -1,5 +1,6 @@
 import uuid
 import string
+import re
 from __init__ import users_collection, Role, Status
 from pymongo.errors import DuplicateKeyError
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -40,20 +41,22 @@ def unique_email(email: str) -> dict:
         return {"success": False, "message": f"Database error: {str(e)}"}
  
  
+_EMAIL_OK = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 def verify_users_data(username: str, email: str, password: str) -> None:
     """Validate user registration data."""
     if not username or not isinstance(username, str):
         raise ValueError("Username must be a non-empty string")
     if len(username) < 3:
         raise ValueError(f"Username '{username}' must be at least 3 characters long.")
- 
+
     if not email or not isinstance(email, str):
         raise ValueError("Email must be a non-empty string")
-    if "@" not in email:
-        raise ValueError(f"Email '{email}' must contain the @ symbol")
-    if not (email.endswith(".com") or email.endswith(".dz")):
-        raise ValueError(f"Email '{email}' must end with either '.com' or '.dz'")
- 
+    em = email.strip()
+    if not _EMAIL_OK.match(em):
+        raise ValueError(f"Email '{email}' is not valid. Use a real address (e.g. name@domain.com).")
+
     if not password or not isinstance(password, str):
         raise ValueError("Password must be a non-empty string")
     if not is_strong_password(password):
@@ -131,6 +134,9 @@ class User:
             "_id": str(user["_id"]),
             "role": user["role"],
             "username": user["username"],
+            "email": user.get("email", ""),
+            "phone": user.get("phone", ""),
+            "wilaya": user.get("wilaya", ""),
             "status": user["status"],          # ← now included
             "onboardingDone": user.get("onboardingDone", False),  # ← now included
             "message": f"User {username} logged in successfully",

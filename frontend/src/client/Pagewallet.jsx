@@ -1,8 +1,9 @@
 // ═══════════════════════════════════════════════════════════
 // Pagewallet.jsx — Billing & Financials
 // ═══════════════════════════════════════════════════════════
-import { useState } from 'react';
-import { TRANSACTIONS, TxIcon, Badge, TopBar, CityBanner } from './Shared';
+import { useEffect, useMemo, useState } from 'react';
+import { TxIcon, Badge, TopBar, CityBanner } from './Shared';
+import { http } from '../api/http';
 const AlgiersImage = null;
 
 import TopUpModal     from './wallet/TopUpModal';
@@ -13,6 +14,69 @@ const ALGIERS_IMG = AlgiersImage;
 
 export default function PageWallet({ onSettings, setActive, addToast, currentUser }) {
   const [modal, setModal] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [walletSummary, setWalletSummary] = useState({
+    balance: 0,
+    spent: 0,
+    topups: 0,
+    cashback: 0,
+  });
+  const cardsStorageKey = useMemo(
+    () => `wallet_cards_${currentUser?._id ?? currentUser?.id ?? "anon"}`,
+    [currentUser]
+  );
+  const [savedCards, setSavedCards] = useState(() => {
+    try {
+      const raw = localStorage.getItem(cardsStorageKey);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const clientId = useMemo(
+    () => currentUser?._id ?? currentUser?.id ?? currentUser?.client_id ?? null,
+    [currentUser]
+  );
+
+  useEffect(() => {
+    let alive = true;
+    async function loadWalletData() {
+      if (!clientId) return;
+      try {
+        const res = await http.get(`/client/deliveries/${clientId}`);
+        const deliveries = res?.data?.deliveries ?? res?.data?.data?.deliveries ?? [];
+        const tx = deliveries.map((d) => {
+          const amountNum = Number(d.price || 0);
+          const rawStatus = String(d.status || "").toLowerCase();
+          const status = rawStatus === "delivered" ? "completed" : rawStatus === "accepted" ? "processing" : "completed";
+          return {
+            id: `#TRX-${String(d._id || "").slice(0, 6).toUpperCase()}`,
+            desc: d.description_of_order || "Delivery payment",
+            date: d.created_at ? String(d.created_at).slice(0, 10) : "—",
+            amount: `-${amountNum.toLocaleString()} DZD`,
+            neg: true,
+            status,
+          };
+        });
+        const spent = tx.reduce((sum, t) => sum + Number(String(t.amount).replace(/[^\d.-]/g, "")), 0);
+        const topups = 0;
+        const cashback = Math.round(spent * 0.01);
+        if (!alive) return;
+        setTransactions(tx);
+        setWalletSummary({
+          balance: Math.max(topups + cashback - spent, 0),
+          spent,
+          topups,
+          cashback,
+        });
+      } catch {
+        if (!alive) return;
+        setTransactions([]);
+      }
+    }
+    loadWalletData();
+    return () => { alive = false; };
+  }, [clientId]);
 
   const walletCards = [
     {
@@ -31,7 +95,7 @@ export default function PageWallet({ onSettings, setActive, addToast, currentUse
       tag:   'SPENDING ANALYSIS',
       icon:  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
       title: 'Spending this Month',
-      val:   '24.800,00',
+      val:   walletSummary.spent.toLocaleString(),
       footer: (
         <div style={{ marginTop:10 }}>
           <div style={{ height:5, background:'rgba(255,255,255,.08)', borderRadius:3, overflow:'hidden', marginBottom:5 }}>
@@ -45,7 +109,7 @@ export default function PageWallet({ onSettings, setActive, addToast, currentUse
       tag:   'WASSALI WALLET',
       icon:  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/></svg>,
       title: 'Available Funds',
-      val:   '12.450,00',
+      val:   walletSummary.balance.toLocaleString(),
       footer: (
         <button onClick={() => setModal('topup')} className="cd-primary-btn"
           style={{ marginTop:12, width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:6, border:'none', borderRadius:10, padding:'10px 0', color:'#0a1628', fontSize:12, fontWeight:700, cursor:'pointer', background:'linear-gradient(135deg,#ADC6FF,#7aa8f5)', fontFamily:"'DM Sans',system-ui,sans-serif" }}>
@@ -89,10 +153,7 @@ export default function PageWallet({ onSettings, setActive, addToast, currentUse
 
         {/* ── Payment cards — 3-column grid, all same size, matching Figma ── */}
         <div className="cd-wallet-stats">
-          {[
-            { last4:'4321', holder:'ALEX BENALI', expiry:'12/26', bg:'linear-gradient(145deg,#1a3a6a,#0e2650)' },
-            { last4:'8810', holder:'ALEX BENALI', expiry:'09/25', bg:'linear-gradient(145deg,#1a3a5a,#0e2240)' },
-          ].map((card, i) => (
+          {savedCards.map((card, i) => (
             <div key={i} className="cd-card-hover"
               style={{ borderRadius:16, background:card.bg, border:'1px solid rgba(255,255,255,.1)', padding:'18px 20px', cursor:'pointer', display:'flex', flexDirection:'column', justifyContent:'space-between', minHeight:140, transition:'all .2s' }}>
               {/* Top row: chip + menu */}
@@ -147,10 +208,16 @@ export default function PageWallet({ onSettings, setActive, addToast, currentUse
         <div style={{ borderRadius:14, background:'#0c1e35', border:'1px solid rgba(255,255,255,.07)', overflow:'hidden' }}>
           <div className="cd-wallet-table-wrap">
             <div style={{ minWidth: 720 }}>
+          {savedCards.length === 0 || transactions.length === 0 ? (
+            <div style={{ padding: "18px 22px", fontSize: 13, color: "rgba(255,255,255,.55)" }}>
+              No transactions yet. Add a payment method to start using your wallet.
+            </div>
+          ) : (
+            <>
           <div style={{ display:'grid', padding:'10px 22px', borderBottom:'1px solid rgba(255,255,255,.06)', fontSize:10, fontWeight:700, letterSpacing:'0.08em', color:'rgba(255,255,255,.25)', gridTemplateColumns:'145px 1fr 130px 165px 110px', fontFamily:"'DM Sans',system-ui,sans-serif" }}>
             <span>TRANSACTION ID</span><span>DESCRIPTION</span><span>DATE</span><span>AMOUNT</span><span>STATUS</span>
           </div>
-          {TRANSACTIONS.map((tx, i) => (
+          {transactions.map((tx, i) => (
             <div key={tx.id} className="cd-order-hover"
               style={{ display:'grid', alignItems:'center', padding:'13px 22px', borderBottom:'1px solid rgba(255,255,255,.04)', gridTemplateColumns:'145px 1fr 130px 165px 110px', animation:`cdFadeUp .25s ease ${i*.05}s both` }}>
               <span style={{ fontSize:11, color:'rgba(96,165,250,.8)', fontFamily:"'JetBrains Mono',monospace" }}>{tx.id}</span>
@@ -161,9 +228,11 @@ export default function PageWallet({ onSettings, setActive, addToast, currentUse
               <span style={{ fontSize:12, color:'rgba(255,255,255,.4)', fontFamily:"'DM Sans',system-ui,sans-serif" }}>{tx.date}</span>
               {/* Green for positive, red for negative — matches Figma */}
               <span style={{ fontSize:13, fontWeight:700, color:tx.neg?'#f87171':'#4ade80', fontFamily:"'JetBrains Mono',monospace" }}>{tx.amount}</span>
-              <Badge status="completed" label="● COMPLETED"/>
+              <Badge status={tx.status === "processing" ? "active" : "completed"} label={tx.status === "processing" ? "● PROCESSING" : "● COMPLETED"}/>
             </div>
           ))}
+            </>
+          )}
             </div>
           </div>
         </div>
@@ -177,8 +246,8 @@ export default function PageWallet({ onSettings, setActive, addToast, currentUse
       </div>
 
       {modal === 'topup'   && <TopUpModal     onClose={() => setModal(null)} balance="12.450,00"/>}
-      {modal === 'history' && <TxHistoryModal  onClose={() => setModal(null)}/>}
-      {modal === 'addcard' && <AddCardModal    onClose={() => setModal(null)}/>}
+      {modal === 'history' && <TxHistoryModal transactions={transactions} onClose={() => setModal(null)}/>}
+      {modal === 'addcard' && <AddCardModal storageKey={cardsStorageKey} onSaved={(card) => setSavedCards((prev) => [...prev, card])} onClose={() => setModal(null)}/>}
     </div>
   );
 }

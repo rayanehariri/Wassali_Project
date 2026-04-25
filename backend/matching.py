@@ -7,6 +7,17 @@ from __init__ import DeliveryStatus, deliveries_collection, delivery_requests, u
 def _utc_now():
     return datetime.now(timezone.utc)
 
+def _norm_wilaya(value: str) -> str:
+    raw = (value or "").strip().lower()
+    if not raw:
+        return ""
+    # Supports values like "02 - Chlef", "02 – Chlef", "Chlef".
+    for sep in (" - ", " – ", "- ", "– "):
+        if sep in raw:
+            raw = raw.split(sep, 1)[1].strip()
+            break
+    return raw
+
 
 def _serialize_request_doc(doc: dict) -> dict:
     """Make Mongo request docs JSON-safe (Flask jsonify chokes on some BSON types)."""
@@ -36,27 +47,70 @@ class DeliveryRequest:
     @staticmethod
     def create(
         client_id: str,
-        pickup: str,
-        dropoff: str,
+        pickup: dict,
+        dropoff: dict,
         description: str,
         price: float,
+        package_meta: dict | None = None,
         pickup_lat: float | None = None,
         pickup_lng: float | None = None,
         dropoff_lat: float | None = None,
         dropoff_lng: float | None = None,
     ) -> dict:
+        # A client can only have one active request/delivery at a time.
+        existing_request = delivery_requests.find_one(
+            {
+                "client_id": client_id,
+                "status": {"$in": [DeliveryStatus.PENDING.value, DeliveryStatus.AWAITING_CLIENT.value]},
+            }
+        )
+        if existing_request:
+            return {
+                "success": False,
+                "code": "REQUEST_ALREADY_ACTIVE",
+                "message": "You already have an active request. Wait until it is completed before creating a new one.",
+            }
+        existing_delivery = deliveries_collection.find_one(
+            {"client_id": client_id, "status": {"$in": [DeliveryStatus.ACCEPTED.value, DeliveryStatus.IN_TRANSIT.value]}}
+        )
+        if existing_delivery:
+            return {
+                "success": False,
+                "code": "DELIVERY_ALREADY_ACTIVE",
+                "message": "You already have an active delivery in progress.",
+            }
+
         request_id = str(uuid.uuid4())
-        pickup_coords = [pickup_lat, pickup_lng] if pickup_lat is not None and pickup_lng is not None else None
-        dropoff_coords = [dropoff_lat, dropoff_lng] if dropoff_lat is not None and dropoff_lng is not None else None
+        pickup = dict(pickup or {})
+        dropoff = dict(dropoff or {})
+        pickup_coords = pickup.get("coords")
+        dropoff_coords = dropoff.get("coords")
+        if not pickup_coords and pickup_lat is not None and pickup_lng is not None:
+            pickup_coords = [pickup_lat, pickup_lng]
+        if not dropoff_coords and dropoff_lat is not None and dropoff_lng is not None:
+            dropoff_coords = [dropoff_lat, dropoff_lng]
         client_doc = users_collection.find_one({"_id": client_id}, {"username": 1, "name": 1})
         client_name = (client_doc or {}).get("name") or (client_doc or {}).get("username") or "Client"
         doc = {
             "_id": request_id,
             "client_id": client_id,
             "client_name": client_name,
-            "pickup": {"label": pickup, "coords": pickup_coords},
-            "dropoff": {"label": dropoff, "coords": dropoff_coords},
+            "pickup": {
+                "label": pickup.get("label") or pickup.get("address") or "",
+                "address": pickup.get("address") or pickup.get("label") or "",
+                "wilaya": pickup.get("wilaya") or "",
+                "commune": pickup.get("commune") or "",
+                "coords": pickup_coords,
+            },
+            "dropoff": {
+                "label": dropoff.get("label") or dropoff.get("address") or "",
+                "address": dropoff.get("address") or dropoff.get("label") or "",
+                "wilaya": dropoff.get("wilaya") or "",
+                "commune": dropoff.get("commune") or "",
+                "coords": dropoff_coords,
+            },
             "package": {"label": description},
+            "package_meta": package_meta or {},
             "payout": int(price),
             "urgent": False,
             "deliverBy": None,
@@ -73,7 +127,7 @@ class DeliveryRequest:
     def deliverer_has_active_assignment(deliverer_id: str) -> bool:
         """True if this deliverer already has an in-progress assigned delivery (client confirmed)."""
         d = deliveries_collection.find_one(
-            {"deliverer_id": deliverer_id, "status": DeliveryStatus.ACCEPTED.value}
+            {"deliverer_id": deliverer_id, "status": {"$in": [DeliveryStatus.ACCEPTED.value, DeliveryStatus.IN_TRANSIT.value]}}
         )
         return d is not None
 
@@ -86,11 +140,25 @@ class DeliveryRequest:
         if DeliveryRequest.deliverer_has_active_assignment(deliverer_id):
             return []
         open_statuses = [DeliveryStatus.PENDING.value, DeliveryStatus.AWAITING_CLIENT.value]
+        deliverer_doc = users_collection.find_one({"_id": deliverer_id}, {"wilaya": 1})
+        deliverer_wilaya = _norm_wilaya((deliverer_doc or {}).get("wilaya") or "")
         reqs = list(delivery_requests.find({"status": {"$in": open_statuses}}))
         out: list[dict] = []
         for r in reqs:
             if any(o.get("deliverer_id") == deliverer_id for o in r.get("offers", [])):
                 continue
+            if deliverer_id in (r.get("rejected_by") or []):
+                continue
+            req_pickup_wilaya = _norm_wilaya((r.get("pickup") or {}).get("wilaya") or "")
+            if deliverer_wilaya and req_pickup_wilaya and req_pickup_wilaya != deliverer_wilaya:
+                continue
+            if not r.get("client_name") and r.get("client_id"):
+                client_doc = users_collection.find_one(
+                    {"_id": r.get("client_id")},
+                    {"username": 1, "name": 1},
+                )
+                if client_doc:
+                    r["client_name"] = client_doc.get("name") or client_doc.get("username") or "Client"
             out.append(_serialize_request_doc(r))
         return out
 
@@ -110,6 +178,8 @@ class DeliveryRequest:
 
         if req.get("status") not in [DeliveryStatus.PENDING.value, DeliveryStatus.AWAITING_CLIENT.value]:
             return {"success": False, "message": "Request is not available"}
+        if deliverer_id in (req.get("rejected_by") or []):
+            return {"success": False, "message": "You already rejected this request"}
 
         offers = req.get("offers", [])
         if any(o.get("deliverer_id") == deliverer_id for o in offers):
@@ -129,6 +199,19 @@ class DeliveryRequest:
             "phase": "awaiting_client_selection",
             "request": DeliveryRequest._to_waiting_item(updated, deliverer_id),
         }
+
+    @staticmethod
+    def reject(request_id: str, deliverer_id: str) -> dict:
+        req = delivery_requests.find_one({"_id": request_id})
+        if not req:
+            return {"success": False, "message": "Request not found"}
+        if req.get("status") not in [DeliveryStatus.PENDING.value, DeliveryStatus.AWAITING_CLIENT.value]:
+            return {"success": False, "message": "Request is not available"}
+        delivery_requests.update_one(
+            {"_id": request_id},
+            {"$addToSet": {"rejected_by": deliverer_id}, "$set": {"updated_at": _utc_now()}},
+        )
+        return {"success": True}
 
     @staticmethod
     def list_awaiting_client_for_deliverer(deliverer_id: str) -> list[dict]:
@@ -176,6 +259,19 @@ class DeliveryRequest:
             )
 
         return {"success": True, "offers": enriched, "request": req}
+
+    @staticmethod
+    def get_active_request_for_client(client_id: str) -> dict | None:
+        req = delivery_requests.find_one(
+            {
+                "client_id": client_id,
+                "status": {"$in": [DeliveryStatus.PENDING.value, DeliveryStatus.AWAITING_CLIENT.value]},
+            },
+            sort=[("updated_at", -1)],
+        )
+        if not req:
+            return None
+        return _serialize_request_doc(req)
 
     @staticmethod
     def select_deliverer(request_id: str, client_id: str, deliverer_id: str) -> dict:
@@ -282,15 +378,36 @@ class DeliveryRequest:
     @staticmethod
     def get_active_task_for_deliverer(deliverer_id: str) -> dict | None:
         delivery = deliveries_collection.find_one(
-            {"deliverer_id": deliverer_id, "status": DeliveryStatus.ACCEPTED.value}
+            {"deliverer_id": deliverer_id, "status": {"$in": [DeliveryStatus.ACCEPTED.value, DeliveryStatus.IN_TRANSIT.value]}}
         )
         if not delivery:
             return None
+        status = delivery.get("status")
+        if status == DeliveryStatus.IN_TRANSIT.value:
+            status_label = "In Transit"
+        elif status == DeliveryStatus.DELIVERED.value:
+            status_label = "Delivered"
+        else:
+            status_label = "Awaiting Pickup"
+        price = delivery.get("price")
+        try:
+            price_num = float(price or 0)
+        except (TypeError, ValueError):
+            price_num = 0.0
         return {
             "orderId": delivery.get("_id"),
-            "status": "Awaiting Pickup",
+            "status": status,
+            "raw_status": status,
+            "status_label": status_label,
             "acceptedAgo": "just now",
             "pickupAt": delivery.get("pickup_address"),
+            "pickup_address": delivery.get("pickup_address"),
+            "dropoff_address": delivery.get("dropoff_address"),
+            "pickup_coords": delivery.get("pickup_coords"),
+            "dropoff_coords": delivery.get("dropoff_coords"),
+            "price": price_num,
+            "client_name": delivery.get("client_name"),
+            "client_id": delivery.get("client_id"),
         }
 
     @staticmethod
@@ -321,15 +438,22 @@ class DeliveryRequest:
             if o.get("deliverer_id") == deliverer_id:
                 accepted_at = o.get("accepted_at")
                 break
+        client_name = req.get("client_name")
+        if not client_name and req.get("client_id"):
+            client_doc = users_collection.find_one(
+                {"_id": req.get("client_id")},
+                {"username": 1, "name": 1},
+            )
+            client_name = (client_doc or {}).get("name") or (client_doc or {}).get("username")
         return {
             "id": req.get("_id"),
             "customer": {
-                "name": req.get("client_name") or f"Client {req.get('client_id', '')[:6]}",
+                "name": client_name or f"Client {req.get('client_id', '')[:6]}",
                 "avatar": "CL",
                 "type": "person",
             },
             "client_id": req.get("client_id"),
-            "client_name": req.get("client_name"),
+            "client_name": client_name,
             "payout": req.get("payout"),
             "pickup": req.get("pickup"),
             "dropoff": req.get("dropoff"),

@@ -121,7 +121,7 @@ def get_active_delivery():
     """Return the client's currently active (accepted) delivery, if any."""
     client_id = request.current_user.get("_id")
     delivery = deliveries_collection.find_one(
-        {"client_id": client_id, "status": "accepted"},
+        {"client_id": client_id, "status": {"$in": ["accepted", "in_transit"]}},
         sort=[("created_at", -1)],
     )
     if not delivery:
@@ -156,6 +156,20 @@ def cancel_delivery():
     return fail(result.get("message", "Cancel failed"), 400)
 
 
+@client.route("/deliveries/cancel/<delivery_id>", methods=["POST"])
+@require_auth("client")
+def cancel_active_delivery(delivery_id: str):
+    result = Delivery.cancel_by_client(delivery_id, request.current_user.get("_id"))
+    if result["success"]:
+        return success(result.get("message", "Delivery cancelled"), status=200)
+    msg = (result.get("message") or "").lower()
+    if "not found" in msg:
+        return fail(result.get("message", "Delivery not found"), 404)
+    if "own" in msg:
+        return fail(result.get("message", "Forbidden"), 403, code="FORBIDDEN")
+    return fail(result.get("message", "Cancel failed"), 400)
+
+
 @client.route("/requests", methods=["POST"])
 @require_auth("client")
 def create_request():
@@ -176,11 +190,23 @@ def create_request():
         dropoff=data["dropoff"],
         description=data["description"],
         price=float(data["price"]),
+        package_meta={
+            "size": data.get("size") or "",
+            "weight": data.get("weight") or "",
+            "fragile": bool(data.get("fragile", False)),
+            "photo_name": data.get("photo_name") or "",
+            "photo_size": int(data.get("photo_size") or 0),
+        },
         pickup_lat=data.get("pickup_lat"),
         pickup_lng=data.get("pickup_lng"),
         dropoff_lat=data.get("dropoff_lat"),
         dropoff_lng=data.get("dropoff_lng"),
     )
+    if not result.get("success"):
+        code = result.get("code")
+        if code in ("REQUEST_ALREADY_ACTIVE", "DELIVERY_ALREADY_ACTIVE"):
+            return fail(result.get("message", "Active request exists"), 409, code=code)
+        return fail(result.get("message", "Request creation failed"), 400, code=code)
     return success("Request created", data=result, status=201)
 
 
@@ -193,6 +219,14 @@ def get_request_offers(request_id: str):
     if not result["success"]:
         return fail(result["message"], 404)
     return success("Offers loaded", data={"offers": result["offers"], "request": result["request"]}, status=200)
+
+
+@client.route("/requests/active", methods=["GET"])
+@require_auth("client")
+def get_active_request():
+    client_id = request.current_user.get("_id")
+    req = DeliveryRequest.get_active_request_for_client(client_id)
+    return success("Active request loaded", data={"request": req}, status=200)
 
 
 @client.route("/requests/<request_id>/select", methods=["POST"])

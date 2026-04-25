@@ -20,27 +20,28 @@ import DelivererHistory from "./track/DelivererHistory";
 import ClientSideBar from "./ClientSideBar";
 
 import { WassaliLogo } from "./Shared";
+import { http } from "../api/http";
 
-const FLOW_STORAGE_KEY = "client_delivery_flow";
+const FLOW_STORAGE_KEY_PREFIX = "client_delivery_flow";
 
 export default function ClientDashboard({ currentUser, onLogout, addToast }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [active, setActive] = useState("home");
   const [trackStartPanel, setTrackStartPanel] = useState(null);
+  const [trackChatDeliverer, setTrackChatDeliverer] = useState(null);
   const [deliveryStep, setDeliveryStep] = useState(null);
   const [deliveryData, setDeliveryData] = useState({});
+  const [flowHydrated, setFlowHydrated] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [clientOnline, setClientOnline] = useState(true);
+  const userFlowKey = `${FLOW_STORAGE_KEY_PREFIX}:${currentUser?._id ?? currentUser?.id ?? "anon"}`;
 
   useEffect(() => {
     document.querySelector(".cd-main-scroll")?.scrollTo(0, 0);
   }, [active, deliveryStep]);
 
-  useEffect(() => {
-    if (active !== "track" && trackStartPanel) {
-      setTrackStartPanel(null);
-    }
-  }, [active, trackStartPanel]);
+  // Keep requested start panel stable long enough for PageTrack bootstrap.
+  // It can be reset safely after user leaves/reopens track manually.
 
   useEffect(() => {
     function handleResize() {
@@ -66,26 +67,60 @@ export default function ClientDashboard({ currentUser, onLogout, addToast }) {
   useEffect(() => {
     // Restore pending flow (choose/select) so user can continue after navigation.
     try {
-      const raw = localStorage.getItem(FLOW_STORAGE_KEY);
+      const raw = localStorage.getItem(userFlowKey);
       if (!raw) return;
       const saved = JSON.parse(raw);
       if (saved?.requestId && !deliveryStep) {
         setDeliveryData(saved);
-        setDeliveryStep("choose");
+        // Keep the top "Resume" bar visible until the user chooses to continue.
       }
     } catch {}
-  }, []);
+    finally {
+      setFlowHydrated(true);
+    }
+  }, [userFlowKey, deliveryStep]);
 
   useEffect(() => {
+    if (!flowHydrated) return;
     // Persist only if we already have a created request.
     if (deliveryData?.requestId && ["choose", "checkout", "success"].includes(deliveryStep || "")) {
-      try { localStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(deliveryData)); } catch {}
+      try { localStorage.setItem(userFlowKey, JSON.stringify(deliveryData)); } catch {}
       return;
     }
     if (!deliveryStep) {
-      try { localStorage.removeItem(FLOW_STORAGE_KEY); } catch {}
+      try {
+        if (!deliveryData?.requestId) localStorage.removeItem(userFlowKey);
+        else localStorage.setItem(userFlowKey, JSON.stringify(deliveryData));
+      } catch {}
     }
-  }, [deliveryStep, deliveryData]);
+  }, [deliveryStep, deliveryData, userFlowKey, flowHydrated]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadActiveRequestFromServer() {
+      try {
+        const res = await http.get("/client/requests/active");
+        const req = res?.data?.request ?? res?.data?.data?.request ?? null;
+        if (!alive) return;
+        if (req?._id) {
+          setDeliveryData((prev) => ({ ...prev, requestId: req._id }));
+          return;
+        }
+        // Clear stale local flow if server has no active request.
+        setDeliveryData((prev) => {
+          if (!prev?.requestId) return prev;
+          const next = { ...prev };
+          delete next.requestId;
+          return next;
+        });
+        try { localStorage.removeItem(userFlowKey); } catch {}
+      } catch {
+        // Keep local flow fallback only.
+      }
+    }
+    loadActiveRequestFromServer();
+    return () => { alive = false; };
+  }, [userFlowKey]);
 
   function startNewDelivery() { setDeliveryStep("form"); }
   function goToChoose(formData) { setDeliveryData((d) => ({ ...d, ...formData })); setDeliveryStep("choose"); }
@@ -96,9 +131,10 @@ export default function ClientDashboard({ currentUser, onLogout, addToast }) {
   function exitDeliveryFlow() {
     setDeliveryStep(null);
     setDeliveryData({});
-    try { localStorage.removeItem(FLOW_STORAGE_KEY); } catch {}
+    try { localStorage.removeItem(userFlowKey); } catch {}
   }
   function openTrackChatFromSuccess() {
+    setTrackChatDeliverer(deliveryData?.deliverer || null);
     setDeliveryStep(null);
     setDeliveryData({});
     setTrackStartPanel("chat");
@@ -264,6 +300,7 @@ export default function ClientDashboard({ currentUser, onLogout, addToast }) {
                 setActive={setActive}
                 addToast={addToast}
                 startPanel={trackStartPanel}
+                startChatDeliverer={trackChatDeliverer}
                 onSettings={() => setActive("settings")}
                 orderId={deliveryData?.orderId || deliveryData?.deliveryId || null}
               />

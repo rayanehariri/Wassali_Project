@@ -98,12 +98,12 @@ export default function OrdersTableSection() {
   }
  
   // ── 3. updateOrderStatus — triggered by status dropdown ──
-  async function handleStatusChange(orderId, newStatus) {
+  async function handleStatusChange(mongoId, newStatus) {
     try {
-      await updateOrderStatus(orderId, newStatus);
+      await updateOrderStatus(mongoId, newStatus);
       // update locally without refetching
       setOrders((prev) =>
-        prev.map((o) => o.id === orderId ? { ...o, status: newStatus } : o)
+        prev.map((o) => o._mongoId === mongoId ? { ...o, status: newStatus } : o)
       );
     } catch (err) {
       console.error("Failed to update status:", err);
@@ -111,12 +111,12 @@ export default function OrdersTableSection() {
   }
  
   // ── 4. deleteOrder — triggered by trash icon ─────────────
-  async function handleDelete(orderId) {
+  async function handleDelete(mongoId) {
     if (!window.confirm("Are you sure you want to delete this order?")) return;
     try {
-      await deleteOrder(orderId);
+      await deleteOrder(mongoId);
       // remove from list locally
-      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      setOrders((prev) => prev.filter((o) => o._mongoId !== mongoId));
       setTotal((prev) => prev - 1);
     } catch (err) {
       console.error("Failed to delete order:", err);
@@ -139,6 +139,8 @@ export default function OrdersTableSection() {
                     />
                     <Input
                       placeholder="Search orders..."
+                      value={search}
+                      onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                       style={{
                         background: "#1e2536",
                         border: "1px solid #33415580",
@@ -267,7 +269,7 @@ export default function OrdersTableSection() {
               ) : (
                 orders.map((order) => (
                   <TableRow
-                    key={order.id}
+                    key={order._mongoId || order.id}
                     style={{ borderColor: "#1e2d3d" }}
                     className="hover:!bg-white/5"
                   >
@@ -344,8 +346,8 @@ export default function OrdersTableSection() {
                     {/* Status — ← uses updateOrderStatus on change */}
                     <TableCell>
                       <Select
-                        defaultValue={order.status}
-                        onValueChange={(val) => handleStatusChange(order.id, val)}
+                        value={order.status}
+                        onValueChange={(val) => handleStatusChange(order._mongoId, val)}
                       >
                         <SelectTrigger
                           style={{
@@ -376,7 +378,7 @@ export default function OrdersTableSection() {
                       <div className="flex items-center gap-1">
                         <Button
                           variant="ghost"
-                          onClick={() => navigate(`/dashboard/order/${order.id}`)}  
+                          onClick={() => navigate(`/dashboard/order/${encodeURIComponent(order._mongoId || order.id)}`)}  
                           size="icon"
                           className="!text-slate-400 hover:!text-white hover:!bg-white/10 rounded-lg"
                         >
@@ -385,7 +387,7 @@ export default function OrdersTableSection() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDelete(order.id)}
+                          onClick={() => handleDelete(order._mongoId)}
                           className="!text-slate-400 hover:!text-red-400 hover:!bg-red-500/10 rounded-lg"
                         >
                           <Trash2 size={15} />

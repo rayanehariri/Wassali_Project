@@ -102,15 +102,15 @@ export default function PageSettings({ currentUser, setActive, addToast }) {
                         const meUser = me?.data?.user ?? me?.data?.data?.user;
                         const username = meUser?.username || currentUser?.username;
                         const mergedName = `${firstName} ${lastName}`.trim();
-                        await http.patch("/auth/me/", {
-                          username: mergedName || username,
-                          email,
-                        });
                         if (currentPassword && newPassword && username) {
                           await changePassword(username, currentPassword, newPassword);
                           setCurrentPassword("");
                           setNewPassword("");
                         }
+                        await http.patch("/auth/me/", {
+                          username: mergedName || username,
+                          email,
+                        });
                         setSaved(true);
                         addToast?.("success", "Settings updated", "Profile changes saved to your account.");
                         setTimeout(() => setSaved(false), 2200);

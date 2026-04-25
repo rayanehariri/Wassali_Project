@@ -79,6 +79,7 @@ class Status(StrEnum):
 class DeliveryStatus(StrEnum):
     PENDING = "pending"
     ACCEPTED = "accepted"
+    IN_TRANSIT = "in_transit"
     AWAITING_CLIENT = "awaiting_client"
     REJECTED = "rejected"
     DELIVERED = "delivered"

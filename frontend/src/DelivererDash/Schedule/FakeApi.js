@@ -209,14 +209,19 @@ export async function getIncomingRequests() {
     return reqs.map((r) => ({
       id: r.request_id ?? r._id ?? r.id,
       customer: {
-        name: r.customer?.name ?? r.client_name ?? `Client ${(r.client_id || "").slice(0, 6)}` ?? "Client",
+        name:
+          r.customer?.name ||
+          r.client_name ||
+          r.client?.name ||
+          "Client",
         avatar: r.customer?.avatar ?? "C",
         type: r.customer?.type ?? "person",
       },
       payout: Number(r.payout ?? r.price ?? 0),
-      pickup: { label: r.pickup?.address ?? r.pickup?.label ?? "Pickup" },
-      dropoff: { label: r.dropoff?.address ?? r.dropoff?.label ?? "Dropoff" },
+      pickup: { ...r.pickup, label: r.pickup?.address ?? r.pickup?.label ?? "Pickup" },
+      dropoff: { ...r.dropoff, label: r.dropoff?.address ?? r.dropoff?.label ?? "Dropoff" },
       package: { label: r.package?.label ?? r.description ?? "Package" },
+      packageMeta: r.package_meta ?? {},
       deliverBy: r.deliverBy ?? null,
       urgent: Boolean(r.urgent ?? false),
     }));
@@ -234,17 +239,22 @@ export async function getAwaitingClientApprovals() {
   return items.map((r) => ({
     id: r.request_id ?? r._id ?? r.id,
     customer: {
-      name: r.customer?.name ?? r.client_name ?? `Client ${(r.client_id || "").slice(0, 6)}` ?? "Client",
+      name:
+        r.customer?.name ||
+        r.client_name ||
+        r.client?.name ||
+        "Client",
       avatar: r.customer?.avatar ?? "C",
       type: r.customer?.type ?? "person",
     },
     payout: Number(r.payout ?? r.price ?? 0),
-    pickup: { label: r.pickup?.address ?? r.pickup?.label ?? "Pickup" },
-    dropoff: { label: r.dropoff?.address ?? r.dropoff?.label ?? "Dropoff" },
+    pickup: { ...r.pickup, label: r.pickup?.address ?? r.pickup?.label ?? "Pickup" },
+    dropoff: { ...r.dropoff, label: r.dropoff?.address ?? r.dropoff?.label ?? "Dropoff" },
     package: { label: r.package?.label ?? r.description ?? "Package" },
+    packageMeta: r.package_meta ?? {},
     deliverBy: r.deliverBy ?? null,
     urgent: Boolean(r.urgent ?? false),
-    waitingSince: r.accepted_at ?? r.updated_at ?? r.created_at ?? null,
+    waitingSince: r.waitingSince ?? r.accepted_at ?? r.updated_at ?? r.created_at ?? null,
     phase: "awaiting_client_selection",
   }));
 }
@@ -265,21 +275,8 @@ export async function acceptRequest(requestId) {
 // ─── 8. rejectRequest ────────────────────────────────────────────────────────
 // Used by: REJECT button on each request card
 export async function rejectRequest(requestId) {
-  /* [FAKE] */
-  await delay(400);
-  const idx = FAKE_INCOMING_REQUESTS.findIndex(r => r.id === requestId);
-  if (idx !== -1) FAKE_INCOMING_REQUESTS.splice(idx, 1);
-  return { success: true };
-  /* [FAKE] */
-
-  /* [REAL]
-  const res = await fetch(`${API_BASE_URL}/deliverer/requests/${requestId}/reject`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error("Failed to reject request");
-  return res.json();
-  [REAL] */
+  const res = await http.post(`/deliverer/requests/${requestId}/reject`);
+  return res?.data ?? { success: true };
 }
 
 // ─── 9. getDailySummary ──────────────────────────────────────────────────────
@@ -304,12 +301,49 @@ export async function getActiveTask() {
   const res = await http.get("/deliverer/active-task");
   const task = res?.data?.task ?? res?.data?.data?.task ?? null;
   if (!task) return null;
+  const pickupLine =
+    task.pickup?.address ??
+    task.pickup_address ??
+    task.pickupAt ??
+    "Pickup";
+  const dropLine = task.dropoff_address ?? task.dropoff?.address ?? task.dropAt ?? "Drop-off";
+  const priceRaw = task.price ?? task.payout_amount;
+  const payout =
+    priceRaw != null && priceRaw !== ""
+      ? `${Number(priceRaw).toLocaleString("en-DZ", { maximumFractionDigits: 0 })} DZD`
+      : "—";
   return {
     orderId: task.order_id ?? task.orderId ?? task._id ?? null,
+    clientId: task.client_id ?? task.clientId ?? null,
+    clientName: task.client_name ?? task.clientName ?? task.customer?.name ?? "Client",
     status: task.status_label ?? task.status ?? "Active",
+    rawStatus: task.raw_status ?? task.rawStatus ?? task.status ?? "",
     acceptedAgo: task.accepted_ago ?? task.acceptedAgo ?? "",
-    pickupAt: task.pickup?.address ?? task.pickupAt ?? "Pickup",
+    pickupAt: pickupLine,
+    pickup_address: task.pickup_address ?? pickupLine,
+    dropoff_address: dropLine,
+    pickup_coords: task.pickup_coords ?? task.pickupCoords ?? null,
+    dropoff_coords: task.dropoff_coords ?? task.dropoffCoords ?? null,
+    price: priceRaw,
+    payout,
+    pickup: { wilaya: "Pickup", commune: pickupLine, street: null },
+    dropoff: { wilaya: "Drop-off", commune: dropLine, street: null },
   };
+}
+
+export async function startTransit(orderId) {
+  const res = await http.post(`/deliverer/deliveries/start_transit/${orderId}`);
+  return res?.data ?? { success: true };
+}
+
+export async function markDelivered(orderId) {
+  const res = await http.post(`/deliverer/deliveries/mark_delivered/${orderId}`);
+  return res?.data ?? { success: true };
+}
+
+export async function cancelActiveDeliveryByDeliverer(orderId) {
+  const res = await http.post(`/deliverer/deliveries/cancel/${orderId}`);
+  return res?.data ?? { success: true };
 }
 
 // ─── 11. viewNavigationDetails ───────────────────────────────────────────────

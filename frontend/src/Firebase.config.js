@@ -1,28 +1,28 @@
-// firebase.config.js
-// ─── STEP 1: Replace these values with YOUR Firebase project config ───────────
-// Go to: https://console.firebase.google.com
-// → Your Project → Project Settings → Your Apps → Web App → Config
- 
 import { initializeApp } from "firebase/app";
 import { getFirestore }  from "firebase/firestore";
 import { getAuth }       from "firebase/auth";
 import { getStorage }    from "firebase/storage";
- 
+
 const firebaseConfig = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT.firebaseapp.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID",
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
- 
+
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.appId) {
+  // Fail fast so chat/auth issues are obvious during setup.
+  throw new Error("Firebase is not configured. Add VITE_FIREBASE_* variables in frontend/.env");
+}
+
 const app       = initializeApp(firebaseConfig);
- 
+
 export const db      = getFirestore(app);   // Firestore database
 export const auth    = getAuth(app);        // Authentication
 export const storage = getStorage(app);     // File uploads
- 
+
 export default app;
  
 // ─── Firestore Data Structure ─────────────────────────────────────────────────

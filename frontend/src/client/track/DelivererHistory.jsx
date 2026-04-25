@@ -48,7 +48,7 @@ export default function DelivererHistory({ onBack, onNewDelivery }) {
   const [loading, setLoading] = useState(true);
 
   const mapped = useMemo(() => {
-    return (deliverers || []).map((d, idx) => {
+    const normalized = (deliverers || []).map((d, idx) => {
       const name = d.name || 'Deliverer';
       const init = initials(name);
       // stable-ish palette
@@ -63,13 +63,14 @@ export default function DelivererHistory({ onBack, onNewDelivery }) {
         name,
         initials: init,
         reviews: 0,
-        rating: 5.0,
+        rating: Number(d.rating ?? 0),
         lastOrderAmount: `${Number(d.lastOrderAmount || 0).toLocaleString()} DZD`,
         lastOrderDate: (d.lastOrderDate || '').slice(0, 10) || '—',
         tags: ['Express'],
         ...p,
       };
     });
+    return normalized.sort((a, b) => b.rating - a.rating);
   }, [deliverers]);
 
   useEffect(() => {

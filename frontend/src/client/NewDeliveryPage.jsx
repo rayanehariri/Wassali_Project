@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { CityBanner } from './Shared';
 import { http } from '../api/http';
+import { communesByWilaya, wilayas } from '../data/algeriaLocations';
 
 async function submitDeliveryRequest(payload) {
   const res = await http.post('/client/requests', payload);
@@ -40,161 +41,20 @@ function BgGrid() {
   );
 }
 
-// ─── ENTER/MAP TAB SWITCHER ───────────────────────────────
-function ModeTab({ label, active, onClick, accent }) {
-  const rgb = accent === '#4EDEA3' ? '78,222,163' : '173,198,255';
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
-        padding: '3px 10px', borderRadius: 5, cursor: 'pointer',
-        fontFamily: "'DM Sans',system-ui,sans-serif", border: 'none', outline: 'none',
-        color:      active ? accent : 'rgba(255,255,255,0.38)',
-        background: active ? `rgba(${rgb},0.14)` : 'rgba(255,255,255,0.06)',
-        boxShadow:  active ? `inset 0 0 0 1px rgba(${rgb},0.32)` : 'inset 0 0 0 1px rgba(255,255,255,0.1)',
-        transition: 'all .15s',
-      }}>
-      {label}
-    </button>
-  );
-}
-
-// ─── FAKE MAP PIN-DROP ────────────────────────────────────
-async function reverseGeocode(lat, lng) {
-  try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`;
-    const res = await fetch(url, { headers: { "Accept": "application/json" } });
-    const data = await res.json();
-    return data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  } catch {
-    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  }
-}
-
-function MapPicker({ accent, onConfirm }) {
-  const [state,   setState]   = useState('idle');   // idle | locating | pinned
-  const [address, setAddress] = useState('');
-  const [coords, setCoords] = useState(null); // [lat, lng]
-  const rgb = accent === '#4EDEA3' ? '78,222,163' : '173,198,255';
-  const mapRef = useState(() => ({ current: null }))[0];
-  const mapObj = useState(() => ({ current: null }))[0];
-  const markerRef = useState(() => ({ current: null }))[0];
-
-  function ensureLeaflet(cb) {
-    if (window.L) { cb(); return; }
-    if (!document.querySelector('#leaflet-css')) {
-      const link = document.createElement('link');
-      link.id='leaflet-css'; link.rel='stylesheet';
-      link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
-    const script = document.createElement('script');
-    script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    script.onload=cb;
-    document.head.appendChild(script);
-  }
-
-  function handleReset() {
-    setState('idle');
-    setAddress('');
-    setCoords(null);
-  }
-
-  return (
-    <div>
-      {/* Map area */}
-      <div
-        style={{
-          borderRadius: state === 'pinned' ? '12px 12px 0 0' : 12,
-          border: `1px solid rgba(${rgb},0.22)`,
-          borderBottom: state === 'pinned' ? 'none' : undefined,
-          position: 'relative', height: 110,
-          background: 'linear-gradient(135deg,#0c2540,#071828)',
-          cursor: state === 'locating' ? 'wait' : 'crosshair',
-          overflow: 'hidden',
-        }}>
-        <div
-          ref={(el) => { mapRef.current = el; }}
-          style={{ position: 'absolute', inset: 0 }}
-        />
-        {/* dot grid */}
-        <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:0.13, pointerEvents:'none' }}>
-          <defs><pattern id={`dp-${rgb}`} width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.8" fill={accent}/></pattern></defs>
-          <rect width="100%" height="100%" fill={`url(#dp-${rgb})`}/>
-        </svg>
-        {/* faux roads */}
-        <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:0.15, pointerEvents:'none' }}>
-          <line x1="0" y1="50%" x2="100%" y2="50%" stroke={accent} strokeWidth="1" strokeDasharray="7 5"/>
-          <line x1="42%" y1="0" x2="42%" y2="100%" stroke={accent} strokeWidth="1" strokeDasharray="7 5"/>
-          <line x1="68%" y1="0" x2="68%" y2="100%" stroke={accent} strokeWidth="0.5" strokeDasharray="4 6"/>
-        </svg>
-
-        {/* Pinned marker dot */}
-        {state === 'pinned' && coords && (
-          <div style={{ position:'absolute', top:'38%', left:'42%', transform:'translate(-50%,-50%)', zIndex:2 }}>
-            <div style={{ width:16, height:16, borderRadius:'50%', background:accent, border:'2.5px solid #071828', boxShadow:`0 0 10px ${accent}` }}/>
-            <div style={{ width:6, height:6, background:accent, clipPath:'polygon(50% 100%,0 0,100% 0)', margin:'-2px auto 0', opacity:0.8 }}/>
-          </div>
-        )}
-
-        <div style={{ position:'relative', zIndex:1, height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:5 }}>
-          {state === 'idle' && (
-            <>
-              <div style={{ width:30, height:30, borderRadius:'50%', background:`rgba(${rgb},0.16)`, border:`1.5px solid ${accent}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-              </div>
-              <span style={{ fontSize:11, fontWeight:600, color:accent, fontFamily:"'DM Sans',system-ui,sans-serif", letterSpacing:'0.04em' }}>CLICK TO PIN LOCATION</span>
-              <span style={{ fontSize:10, color:'rgba(255,255,255,0.28)', fontFamily:"'DM Sans',system-ui,sans-serif" }}>Tap anywhere on the map</span>
-            </>
-          )}
-          {state === 'locating' && (
-            <>
-              <span style={{ width:22, height:22, border:`2px solid rgba(${rgb},0.3)`, borderTopColor:accent, borderRadius:'50%', display:'inline-block', animation:'cdSpin .7s linear infinite' }}/>
-              <span style={{ fontSize:11, color:accent, fontFamily:"'DM Sans',system-ui,sans-serif" }}>Fetching address…</span>
-            </>
-          )}
-          {state === 'pinned' && (
-            <span style={{ fontSize:10, color:`rgba(${rgb},0.6)`, fontFamily:"'DM Sans',system-ui,sans-serif" }}>Click map to repin</span>
-          )}
-        </div>
-      </div>
-
-      {/* Address result + confirm bar — appears when pinned */}
-      {state === 'pinned' && (
-        <div style={{
-          background:`rgba(${rgb},0.08)`,
-          border:`1px solid rgba(${rgb},0.25)`, borderTop:'none',
-          borderRadius:'0 0 12px 12px',
-          padding:'10px 14px',
-          display:'flex', alignItems:'center', justifyContent:'space-between', gap:8,
-        }}>
-          <div style={{ display:'flex', alignItems:'center', gap:7, flex:1, minWidth:0 }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" style={{ flexShrink:0 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-            <span style={{ fontSize:12, color:'rgba(255,255,255,0.8)', fontFamily:"'DM Sans',system-ui,sans-serif", whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{address}</span>
-          </div>
-          <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-            <button
-              onClick={handleReset}
-              style={{ fontSize:10, fontWeight:600, color:'rgba(255,255,255,0.4)', background:'none', border:'1px solid rgba(255,255,255,0.12)', borderRadius:6, padding:'4px 9px', cursor:'pointer', fontFamily:"'DM Sans',system-ui,sans-serif", transition:'all .15s' }}
-              onMouseEnter={e => { e.currentTarget.style.color='white'; e.currentTarget.style.borderColor='rgba(255,255,255,0.3)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color='rgba(255,255,255,0.4)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.12)'; }}>
-              Repin
-            </button>
-            <button
-              onClick={() => coords && onConfirm({ address, coords })}
-              style={{ fontSize:10, fontWeight:700, color:'#071828', background:accent, border:'none', borderRadius:6, padding:'4px 11px', cursor:'pointer', fontFamily:"'DM Sans',system-ui,sans-serif", letterSpacing:'0.04em' }}>
-              USE THIS ✓
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── ADDRESS FIELD (ENTER + MAP tabs) ─────────────────────
-function AddressField({ accent, label, value, onChange, mode, onModeChange, onCoordsChange }) {
+// ─── ADDRESS FIELD ─────────────────────
+function AddressField({
+  accent,
+  label,
+  selectedWilaya,
+  onWilayaChange,
+  selectedCommune,
+  onCommuneChange,
+  addressLine,
+  onAddressLineChange,
+  mapLink,
+  onMapLinkChange,
+}) {
+  const communeOptions = communesByWilaya[selectedWilaya] || [];
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
@@ -202,30 +62,35 @@ function AddressField({ accent, label, value, onChange, mode, onModeChange, onCo
           <div style={{ width:10, height:10, borderRadius:'50%', background:accent, flexShrink:0, boxShadow:`0 0 7px ${accent}` }}/>
           <span style={{ ...LS, marginBottom:0 }}>{label}</span>
         </div>
-        <div style={{ display:'flex', gap:5 }}>
-          <ModeTab label="ENTER" active={mode==='enter'} onClick={() => onModeChange('enter')} accent={accent}/>
-          <ModeTab label="MAP"   active={mode==='map'}   onClick={() => onModeChange('map')}   accent={accent}/>
-        </div>
       </div>
-
-      {mode === 'enter' ? (
-        <input
-          className="cd-input"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={label.includes('PICKUP') ? 'e.g. 12 Rue Didouche Mourad, Algiers…' : 'e.g. Résidence Sahraoui, Hydra…'}
-          style={IS}
-        />
-      ) : (
-        <MapPicker
-          accent={accent}
-          onConfirm={async ({ address, coords }) => {
-            onChange(address);
-            onCoordsChange?.(coords);
-            onModeChange('enter');
-          }}
-        />
-      )}
+        <div style={{ display: 'grid', gap: 10 }}>
+          <select className="cd-input" value={selectedWilaya} onChange={(e) => onWilayaChange(e.target.value)} style={{ ...IS, cursor: 'pointer' }}>
+            <option value="">Select wilaya</option>
+            {wilayas.map((w) => (
+              <option key={w.code} value={w.name}>{w.code} - {w.name}</option>
+            ))}
+          </select>
+          <select className="cd-input" value={selectedCommune} onChange={(e) => onCommuneChange(e.target.value)} style={{ ...IS, cursor: 'pointer' }} disabled={!selectedWilaya}>
+            <option value="">{selectedWilaya ? 'Select commune' : 'Select wilaya first'}</option>
+            {communeOptions.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+          <input
+            className="cd-input"
+            value={addressLine}
+            onChange={e => onAddressLineChange(e.target.value)}
+            placeholder="Street / neighborhood / landmark"
+            style={IS}
+          />
+          <input
+            className="cd-input"
+            value={mapLink}
+            onChange={e => onMapLinkChange(e.target.value)}
+            placeholder="Google Maps link (optional)"
+            style={IS}
+          />
+        </div>
     </div>
   );
 }
@@ -239,17 +104,23 @@ export default function NewDeliveryPage({ currentUser, addToast, onNext, onBack 
   const [photo,       setPhoto]       = useState(null);
   const [pickup,      setPickup]      = useState('');
   const [dropoff,     setDropoff]     = useState('');
-  const [pickupMode,  setPickupMode]  = useState('enter');
-  const [dropoffMode, setDropoffMode] = useState('map');
-  const [pickupCoords, setPickupCoords] = useState(null);   // [lat,lng]
-  const [dropoffCoords, setDropoffCoords] = useState(null); // [lat,lng]
+  const [pickupWilaya, setPickupWilaya] = useState('');
+  const [pickupCommune, setPickupCommune] = useState('');
+  const [pickupAddressLine, setPickupAddressLine] = useState('');
+  const [pickupMapLink, setPickupMapLink] = useState('');
+  const [dropoffWilaya, setDropoffWilaya] = useState('');
+  const [dropoffCommune, setDropoffCommune] = useState('');
+  const [dropoffAddressLine, setDropoffAddressLine] = useState('');
+  const [dropoffMapLink, setDropoffMapLink] = useState('');
   const [schedule,    setSchedule]    = useState('Immediate Dispatch');
   const [loading,     setLoading]     = useState(false);
 
   async function handleSubmit() {
+    const pickupLabel = [pickupWilaya, pickupCommune, pickupAddressLine].filter(Boolean).join(', ') || pickup;
+    const dropoffLabel = [dropoffWilaya, dropoffCommune, dropoffAddressLine].filter(Boolean).join(', ') || dropoff;
     if (!desc.trim())    { addToast?.('error','Missing field','Please enter a package description.'); return; }
-    if (!pickup.trim())  { addToast?.('error','Missing field','Please enter a pickup address.');  return; }
-    if (!dropoff.trim()) { addToast?.('error','Missing field','Please enter a drop-off address.'); return; }
+    if (!pickupLabel.trim())  { addToast?.('error','Missing field','Please enter a pickup address.');  return; }
+    if (!dropoffLabel.trim()) { addToast?.('error','Missing field','Please enter a drop-off address.'); return; }
     setLoading(true);
     try {
       const clientId = currentUser?._id ?? currentUser?.id ?? currentUser?.client_id;
@@ -261,10 +132,27 @@ export default function NewDeliveryPage({ currentUser, addToast, onNext, onBack 
         dropoff,
         description: desc,
         price: 250,
-        pickup_lat: pickupCoords?.[0] ?? null,
-        pickup_lng: pickupCoords?.[1] ?? null,
-        dropoff_lat: dropoffCoords?.[0] ?? null,
-        dropoff_lng: dropoffCoords?.[1] ?? null,
+        size,
+        weight,
+        fragile,
+        photo_name: photo?.name || '',
+        photo_size: photo?.size || 0,
+        pickup: {
+          label: pickupLabel,
+          address: pickupAddressLine || pickupLabel,
+          wilaya: pickupWilaya,
+          commune: pickupCommune,
+          coords: null,
+          map_link: pickupMapLink || '',
+        },
+        dropoff: {
+          label: dropoffLabel,
+          address: dropoffAddressLine || dropoffLabel,
+          wilaya: dropoffWilaya,
+          commune: dropoffCommune,
+          coords: null,
+          map_link: dropoffMapLink || '',
+        },
       });
 
       const requestId = res?.requestId ?? res?.data?.requestId;
@@ -277,8 +165,14 @@ export default function NewDeliveryPage({ currentUser, addToast, onNext, onBack 
         fragile,
         pickup,
         dropoff,
-        pickupCoords,
-        dropoffCoords,
+        pickupWilaya,
+        pickupCommune,
+        pickupAddressLine,
+        pickupMapLink,
+        dropoffWilaya,
+        dropoffCommune,
+        dropoffAddressLine,
+        dropoffMapLink,
         schedule,
         requestId,
       });
@@ -422,7 +316,18 @@ export default function NewDeliveryPage({ currentUser, addToast, onNext, onBack 
               </div>
 
               {/* Pickup */}
-              <AddressField accent="#4EDEA3" label="PICKUP ADDRESS" value={pickup} onChange={setPickup} mode={pickupMode} onModeChange={setPickupMode} onCoordsChange={setPickupCoords}/>
+              <AddressField
+                accent="#4EDEA3"
+                label="PICKUP ADDRESS"
+                selectedWilaya={pickupWilaya}
+                onWilayaChange={(v) => { setPickupWilaya(v); setPickupCommune(''); setPickup(`${v}${pickupAddressLine ? `, ${pickupAddressLine}` : ''}`); }}
+                selectedCommune={pickupCommune}
+                onCommuneChange={(v) => { setPickupCommune(v); setPickup([pickupWilaya, v, pickupAddressLine].filter(Boolean).join(', ')); }}
+                addressLine={pickupAddressLine}
+                onAddressLineChange={(v) => { setPickupAddressLine(v); setPickup([pickupWilaya, pickupCommune, v].filter(Boolean).join(', ')); }}
+                mapLink={pickupMapLink}
+                onMapLinkChange={setPickupMapLink}
+              />
 
               {/* Route connector — clean vertical line with dots */}
               <div style={{ display:'flex', gap:0, margin:'12px 0 12px 4px', alignItems:'stretch' }}>
@@ -440,7 +345,18 @@ export default function NewDeliveryPage({ currentUser, addToast, onNext, onBack 
 
               {/* Drop-off */}
               <div style={{ marginBottom:20 }}>
-                <AddressField accent="#ADC6FF" label="DROP-OFF ADDRESS" value={dropoff} onChange={setDropoff} mode={dropoffMode} onModeChange={setDropoffMode} onCoordsChange={setDropoffCoords}/>
+                <AddressField
+                  accent="#ADC6FF"
+                  label="DROP-OFF ADDRESS"
+                  selectedWilaya={dropoffWilaya}
+                  onWilayaChange={(v) => { setDropoffWilaya(v); setDropoffCommune(''); setDropoff(`${v}${dropoffAddressLine ? `, ${dropoffAddressLine}` : ''}`); }}
+                  selectedCommune={dropoffCommune}
+                  onCommuneChange={(v) => { setDropoffCommune(v); setDropoff([dropoffWilaya, v, dropoffAddressLine].filter(Boolean).join(', ')); }}
+                  addressLine={dropoffAddressLine}
+                  onAddressLineChange={(v) => { setDropoffAddressLine(v); setDropoff([dropoffWilaya, dropoffCommune, v].filter(Boolean).join(', ')); }}
+                  mapLink={dropoffMapLink}
+                  onMapLinkChange={setDropoffMapLink}
+                />
               </div>
 
               {/* Schedule */}

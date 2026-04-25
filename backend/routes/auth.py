@@ -1,4 +1,4 @@
-from __init__ import Status, Role, app
+from __init__ import Status, Role, app, users_collection
 from models import User, Identity
 from flask import Blueprint, request
 from auth_utils import (
@@ -75,6 +75,7 @@ def register_start():
         data["phone"],
         data["password"],
         data.get("role") or "client",
+        data.get("wilaya"),
     )
     if result.get("success"):
         payload = {
@@ -102,6 +103,7 @@ def register_email_start():
         data["email"],
         data["password"],
         data.get("role") or "client",
+        data.get("wilaya"),
     )
     if result.get("success"):
         payload = {
@@ -310,6 +312,31 @@ def logout():
     return success("Logged out successfully", status=200)
 
 
+@auth.route("/peer/<user_id>/", methods=["GET"])
+@require_auth()
+def get_peer_profile(user_id: str):
+    """Public display fields for chat / UI (Mongo user id)."""
+    uid = (user_id or "").strip()
+    if not uid:
+        return fail("user id required", 400, code="VALIDATION_ERROR")
+    doc = users_collection.find_one({"_id": uid}, {"password": 0, "email": 0})
+    if not doc:
+        return fail("User not found", 404, code="NOT_FOUND")
+    display = doc.get("name") or doc.get("username") or "User"
+    return success(
+        "Peer profile loaded",
+        data={
+            "user": {
+                "_id": str(doc["_id"]),
+                "username": doc.get("username"),
+                "name": display,
+                "role": doc.get("role"),
+            }
+        },
+        status=200,
+    )
+
+
 @auth.route("/me/", methods=["GET"])
 @require_auth()
 def get_me():
@@ -325,6 +352,8 @@ def get_me():
                 "role": user.get("role"),
                 "status": user.get("status"),
                 "onboardingDone": user.get("onboardingDone", False),
+                "phone": user.get("phone", ""),
+                "wilaya": user.get("wilaya", ""),
             }
         },
         status=200,
@@ -350,6 +379,12 @@ def update_me():
         if "@" not in email:
             return fail("email must be valid", 400, code="VALIDATION_ERROR")
         set_doc["email"] = email
+    wilaya = payload.get("wilaya")
+    if isinstance(wilaya, str):
+        wilaya = wilaya.strip()
+        if len(wilaya) < 2:
+            return fail("wilaya must be at least 2 characters", 400, code="VALIDATION_ERROR")
+        set_doc["wilaya"] = wilaya
 
     if not set_doc:
         return fail("No updatable fields provided", 400, code="VALIDATION_ERROR")
@@ -380,6 +415,8 @@ def update_me():
                 "role": refreshed.get("role"),
                 "status": refreshed.get("status"),
                 "onboardingDone": refreshed.get("onboardingDone", False),
+                "phone": refreshed.get("phone", ""),
+                "wilaya": refreshed.get("wilaya", ""),
             }
         },
         status=200,
