@@ -30,6 +30,8 @@ delivery_requests = db["delivery_requests"]
 verifications_collection = db["verifications"]
 password_resets_collection = db["password_resets"]
 pending_phone_registrations = db["pending_phone_registrations"]
+chat_conversations = db["chat_conversations"]
+chat_messages = db["chat_messages"]
 
 # Database Indexes for performance and uniqueness constraints
 users_collection.create_index("username", unique=True)

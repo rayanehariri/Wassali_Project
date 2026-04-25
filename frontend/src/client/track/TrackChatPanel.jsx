@@ -54,6 +54,8 @@ export default function TrackChatPanel({ deliverer, onClose }) {
   const delivererKey =
     deliverer?.deliverer_id || deliverer?.id || deliverer?.mongoId || null;
 
+  const customerConvs = conversations.filter(c => c.type !== "support");
+
   useEffect(() => {
     let alive = true;
     async function bootstrap() {
@@ -127,10 +129,10 @@ export default function TrackChatPanel({ deliverer, onClose }) {
             </div>
           ) : chatError ? (
             <p style={{ margin: 0, padding: 16, fontSize: 12, color: "#fca5a5" }}>{chatError}</p>
-          ) : conversations.length === 0 ? (
+          ) : customerConvs.length === 0 ? (
             <p style={{ margin: 0, padding: 16, fontSize: 12, color: "rgba(255,255,255,0.45)" }}>No conversations yet.</p>
           ) : (
-            conversations.map((conv) => (
+            customerConvs.map((conv) => (
               <ConvItem
                 key={conv.id}
                 conv={conv}

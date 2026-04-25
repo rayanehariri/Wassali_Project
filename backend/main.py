@@ -8,6 +8,7 @@ from routes.deliverer import deliverer
 from error_handlers import register_error_handlers
 from verification_routes import verification
 from __init__ import users_collection
+from chat import socketio 
 
 # Register blueprints with URL prefixes
 app.register_blueprint(admin, url_prefix="/api/admin")
@@ -64,4 +65,4 @@ def health_check():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False)
+   socketio.run(app, debug=True, use_reloader=False)

@@ -1,45 +1,68 @@
 // ═══════════════════════════════════════════════════════════
 // ChatPanel.jsx — Live chat with Wassali support agent
+// Uses shared Socket.IO connection via useChat hook
 // Usage: <ChatPanel onClose={() => {}} />
 // ═══════════════════════════════════════════════════════════
 import { useState, useRef, useEffect } from 'react';
+import { useChat, formatTime, resolveCurrentUid } from '../../hooks/Usechat';
 
-const INITIAL_MSGS = [
-  { from:'agent', text:"Hello Alex! I'm Amina from the Wassali support team. How can I assist you with your delivery today? 😊", time:'14:06' },
-  { from:'user',  text:"Hi Amina, I'm checking on the status of my refund for TK-8821.", time:'14:06' },
-  { from:'agent', text:"I'm looking into that for you right now. One moment please.", time:'14:07' },
-];
-
-const AGENT_REPLIES = [
-  "I've updated your ticket. The refund should arrive within 2-3 business days.",
-  "Thank you for reaching out! Is there anything else I can help you with?",
-  "I've escalated your case to our finance team. You'll receive an email confirmation shortly.",
-  "Your request has been logged. Our team will follow up within 24 hours.",
-];
+const SUPPORT_AGENT_UID = "ADMIN-ROOT-001";
 
 export default function LiveChat({ onClose }) {
-  const [msgs,   setMsgs]   = useState(INITIAL_MSGS);
-  const [input,  setInput]  = useState('');
-  const [typing, setTyping] = useState(false);
+  const [input, setInput] = useState('');
   const bottomRef = useRef(null);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior:'smooth' });
-  }, [msgs, typing]);
+  const userUid = resolveCurrentUid();
 
-  async function send() {
+  const {
+    messages,
+    otherTyping,
+    chatError,
+    sendMessage,
+    createConversation,
+    activeConvId,
+    setActiveConvId,
+    handleTyping,
+    loadingConvs,
+  } = useChat(userUid);
+
+  const [ready, setReady] = useState(false);
+  const bootstrapRef = useRef(false);
+
+  // Bootstrap: create or find the support conversation on mount
+  useEffect(() => {
+    if (bootstrapRef.current || !userUid) return;
+    bootstrapRef.current = true;
+    createConversation(SUPPORT_AGENT_UID, "support").then((id) => {
+      if (id) {
+        setActiveConvId(id);
+        setReady(true);
+      }
+    });
+  }, [userUid, createConversation, setActiveConvId]);
+
+  // Mark ready once we have an active conversation
+  useEffect(() => {
+    if (activeConvId) setReady(true);
+  }, [activeConvId]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, otherTyping]);
+
+  function send() {
     const text = input.trim();
-    if (!text) return;
+    if (!text || !activeConvId) return;
     setInput('');
-    const now = new Date().toLocaleTimeString('fr-DZ', { hour:'2-digit', minute:'2-digit' });
-    setMsgs(m => [...m, { from:'user', text, time:now }]);
-    setTyping(true);
-    await new Promise(r => setTimeout(r, 1200 + Math.random() * 800));
-    setTyping(false);
-    const reply = AGENT_REPLIES[Math.floor(Math.random() * AGENT_REPLIES.length)];
-    const replyTime = new Date().toLocaleTimeString('fr-DZ', { hour:'2-digit', minute:'2-digit' });
-    setMsgs(m => [...m, { from:'agent', text:reply, time:replyTime }]);
+    sendMessage(text);
   }
+
+  function handleInput(e) {
+    setInput(e.target.value);
+    handleTyping?.();
+  }
+
+  const error = chatError || (!userUid ? "Please log in to use live chat." : null);
 
   return (
     <div style={{
@@ -71,36 +94,48 @@ export default function LiveChat({ onClose }) {
 
       {/* ── Messages ── */}
       <div style={{ flex:1, overflowY:'auto', padding:'14px 14px 8px', display:'flex', flexDirection:'column', gap:10, maxHeight:310, minHeight:240 }}>
-        {msgs.map((m, i) => (
-          <div key={i} style={{ display:'flex', flexDirection:'column', alignItems:m.from==='user'?'flex-end':'flex-start' }}>
-            <div style={{
-              maxWidth:'82%', padding:'10px 13px',
-              borderRadius: m.from==='user' ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
-              background: m.from==='user' ? 'linear-gradient(135deg,#2563eb,#1d4ed8)' : 'rgba(255,255,255,0.07)',
-              border: m.from==='user' ? 'none' : '1px solid rgba(255,255,255,0.08)',
-              fontSize:13, color:'white',
-              fontFamily:"'DM Sans',system-ui,sans-serif", lineHeight:1.5,
-            }}>
-              {m.text}
-            </div>
-            <span style={{ fontSize:9, color:'rgba(255,255,255,0.3)', fontFamily:"'DM Sans',system-ui,sans-serif", marginTop:3, padding:'0 4px' }}>{m.time}</span>
+        {error ? (
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}>
+            <p style={{ fontSize:12, color:'#fca5a5', textAlign:'center', margin:0 }}>{error}</p>
           </div>
-        ))}
-
-        {/* Typing indicator */}
-        {typing && (
-          <div style={{ display:'flex', alignItems:'flex-start' }}>
-            <div style={{ padding:'10px 14px', borderRadius:'14px 14px 14px 4px', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.08)' }}>
-              <div style={{ display:'flex', gap:4, alignItems:'center' }}>
-                {[0,1,2].map(i => (
-                  <div key={i} style={{ width:6, height:6, borderRadius:'50%', background:'rgba(255,255,255,0.4)', animation:`cdDotPulse 1.2s ease ${i*0.2}s infinite` }}/>
-                ))}
+        ) : !ready ? (
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}>
+            <div style={{ width:20, height:20, border:'2px solid rgba(59,130,246,0.3)', borderTopColor:'#3b82f6', borderRadius:'50%', animation:'spin 1s linear infinite' }} />
+          </div>
+        ) : (
+          <>
+            {messages.map((m) => (
+              <div key={m.id} style={{ display:'flex', flexDirection:'column', alignItems: m.senderId === userUid ? 'flex-end' : 'flex-start' }}>
+                <div style={{
+                  maxWidth:'82%', padding:'10px 13px',
+                  borderRadius: m.senderId === userUid ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+                  background: m.senderId === userUid ? 'linear-gradient(135deg,#2563eb,#1d4ed8)' : 'rgba(255,255,255,0.07)',
+                  border: m.senderId === userUid ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                  fontSize:13, color:'white',
+                  fontFamily:"'DM Sans',system-ui,sans-serif", lineHeight:1.5,
+                }}>
+                  {m.text}
+                </div>
+                <span style={{ fontSize:9, color:'rgba(255,255,255,0.3)', fontFamily:"'DM Sans',system-ui,sans-serif", marginTop:3, padding:'0 4px' }}>{formatTime(m.timestamp)}</span>
               </div>
-            </div>
-          </div>
-        )}
+            ))}
 
-        <div ref={bottomRef}/>
+            {/* Typing indicator */}
+            {otherTyping && (
+              <div style={{ display:'flex', alignItems:'flex-start' }}>
+                <div style={{ padding:'10px 14px', borderRadius:'14px 14px 14px 4px', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                    {[0,1,2].map(i => (
+                      <div key={i} style={{ width:6, height:6, borderRadius:'50%', background:'rgba(255,255,255,0.4)', animation:`cdDotPulse 1.2s ease ${i*0.2}s infinite` }}/>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div ref={bottomRef}/>
+          </>
+        )}
       </div>
 
       {/* ── Input bar ── */}
@@ -112,15 +147,17 @@ export default function LiveChat({ onClose }) {
 
         <input
           value={input}
-          onChange={e => setInput(e.target.value)}
+          onChange={handleInput}
           onKeyDown={e => { if (e.key === 'Enter') send(); }}
-          placeholder="Type your message..."
+          placeholder={ready ? "Type your message..." : "Connecting..."}
+          disabled={!ready}
           className="cd-input"
           style={{ flex:1, padding:'9px 12px', fontSize:13, color:'white', borderRadius:10, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.09)', fontFamily:"'DM Sans',system-ui,sans-serif", outline:'none' }}
         />
 
         {/* Send button */}
         <button onClick={send}
+          disabled={!input.trim() || !ready}
           style={{ width:34, height:34, borderRadius:10, background:'#2563eb', border:'none', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0, transition:'opacity .15s' }}
           onMouseEnter={e => e.currentTarget.style.opacity = '.8'}
           onMouseLeave={e => e.currentTarget.style.opacity = '1'}>

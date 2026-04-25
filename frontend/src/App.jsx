@@ -1,10 +1,8 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import './index.css';
- 
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './Firebase.config';
- 
+
+
 import { ToastContainer, useToast } from './Home/Toast';
 import Nav from './common/NavBar';
 import Home from './Home/HomePage';
@@ -57,7 +55,8 @@ function enrichedUser(user) {
   if (!user) return null;
   return {
     ...user,
-    uid: user.uid || null,
+    uid: user.uid || user.id || null,
+    id: user.id || user.uid || null,
   };
 }
  
@@ -244,19 +243,8 @@ export default function App() {
     validateSession();
     return () => { cancelled = true; };
   }, []);
- 
-  // ── Firebase: restore uid after page refresh ────────────────────────────
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser && currentUser && !currentUser.uid) {
-        const updated = { ...currentUser, uid: firebaseUser.uid };
-        setCurrentUser(updated);
-        try { localStorage.setItem('currentUser', JSON.stringify(updated)); } catch {}
-      }
-    });
-    return () => unsub();
-  }, [currentUser]);
- 
+
+
   // ── Persist currentUser to localStorage whenever it changes ────────────
   useEffect(() => {
     if (currentUser) {
@@ -278,8 +266,7 @@ export default function App() {
     }
     if (!role) role = 'client';
 
-    const firebaseUid = user.uid || auth.currentUser?.uid || null;
-    let finalUser = { ...user, role, uid: firebaseUid };
+    let finalUser = { ...user, role, uid: user.uid || user.id || null };
  
     if (role === 'deliverer') {
       // Read welcomeSeen from the previously saved user in localStorage,
@@ -528,14 +515,13 @@ export default function App() {
           <Route path="reports"          element={<ReportsPage />} />
           <Route path="profile"          element={<AdminProfilePage currentUser={currentUser} />} />
           <Route path="settings"         element={<AdminSettingsPage currentUser={currentUser} />} />
-          
-        </Route>
-         <Route path="/dashboard/messages" element={
+          <Route path="messages" element={
             <Suspense fallback={<ChatLoader />}>
               <AdminCourierChat currentUser={enrichedUser(currentUser)} />
             </Suspense>
           }/>
-          <Route path="/dashboard/verification/:id" element={<DocViewerPage />} />
+          <Route path="verification/:id" element={<DocViewerPage />} />
+        </Route>
  
         {/* ── Catch-all ── */}
         <Route path="*" element={<Navigate to="/" replace />} />

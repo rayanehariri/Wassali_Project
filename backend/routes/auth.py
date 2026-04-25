@@ -319,7 +319,13 @@ def get_peer_profile(user_id: str):
     uid = (user_id or "").strip()
     if not uid:
         return fail("user id required", 400, code="VALIDATION_ERROR")
-    doc = users_collection.find_one({"_id": uid}, {"password": 0, "email": 0})
+    try:
+        from bson.objectid import ObjectId
+        query_id = ObjectId(uid)
+    except Exception:
+        query_id = uid
+
+    doc = users_collection.find_one({"_id": query_id}, {"password": 0, "email": 0})
     if not doc:
         return fail("User not found", 404, code="NOT_FOUND")
     display = doc.get("name") or doc.get("username") or "User"
@@ -346,7 +352,7 @@ def get_me():
         "Profile loaded",
         data={
             "user": {
-                "_id": user.get("_id"),
+                "_id": str(user.get("_id")) if user.get("_id") else None,
                 "username": user.get("username"),
                 "email": user.get("email"),
                 "role": user.get("role"),

@@ -129,7 +129,14 @@ def require_auth(required_role: str | None = None):
             if payload.get("type") != "access":
                 return jsonify({"success": False, "message": "Invalid access token"}), 401
 
-            user = users_collection.find_one({"_id": payload.get("sub")})
+            from bson.objectid import ObjectId
+            sub = payload.get("sub")
+            try:
+                query_id = ObjectId(sub)
+            except Exception:
+                query_id = sub
+
+            user = users_collection.find_one({"_id": query_id})
             if not user:
                 return jsonify({"success": False, "message": "User not found"}), 404
 

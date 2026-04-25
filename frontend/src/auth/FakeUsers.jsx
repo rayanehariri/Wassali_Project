@@ -1,9 +1,8 @@
 // AuthApi.js
-// Same as your FakeAuthApi.js but with Firebase token added to login()
-// Everything else is IDENTICAL — register, forgotPassword, changeUsername, etc.
+// Auth API helpers — Firebase removed, all auth via local Flask backend + JWT
 
-// FakeAuthApi.js
 import { http } from "../api/http";
+import { normalizeRole } from "./roles";
 
 function firstValidationMessage(errors) {
   if (!errors || typeof errors !== "object") return null;
@@ -29,11 +28,7 @@ export function formatAuthApiError(err, fallback = "Request failed.") {
   if (data?.message && String(data.message).trim()) return String(data.message).trim();
   return err?.message || fallback;
 }
-import { signInWithCustomToken, signOut } from "firebase/auth";
-import { collection, doc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
-import { auth, db } from "../Firebase.config";
-import { normalizeRole } from "./roles";
- 
+
 // ─── Offline / fallback admin ──────────────────────────────────────────────
 // This account works in two situations:
 //   1. Backend is completely offline (network error)
@@ -50,39 +45,7 @@ const FALLBACK_ADMIN = {
   welcomeSeen:    true,
   avatar:         "",
 };
- 
-// ─── Helper: sign into Firebase ────────────────────────────────────────────
-async function signIntoFirebase(user, firebaseToken) {
-  if (!firebaseToken) {
-    // Backend may not return a custom token yet: reuse existing Firestore uid if linked by mongoId.
-    try {
-      const q = query(collection(db, "users"), where("mongoId", "==", user.id));
-      const snap = await getDocs(q);
-      if (!snap.empty) return { ...user, uid: snap.docs[0].id };
-    } catch {}
-    return user;
-  }
-  try {
-    await signInWithCustomToken(auth, firebaseToken);
-    const uid = auth.currentUser?.uid;
-    if (uid) {
-      await setDoc(doc(db, "users", uid), {
-        uid,
-        mongoId:  user.id,
-        name:     user.name,
-        role:     user.role,
-        avatar:   (user.name ?? "??").slice(0, 2).toUpperCase(),
-        status:   "online",
-        lastSeen: serverTimestamp(),
-      }, { merge: true });
-      return { ...user, uid };
-    }
-  } catch (firebaseErr) {
-    console.warn("⚠️ Firebase sign-in error (non-blocking):", firebaseErr.message);
-  }
-  return user;
-}
- 
+
 // ─── Helper: check if credentials match the fallback admin ────────────────
 function isFallbackAdmin(email, password) {
   return (
@@ -90,7 +53,7 @@ function isFallbackAdmin(email, password) {
     password === FALLBACK_ADMIN.password
   );
 }
- 
+
 function buildFallbackAdminResult() {
   return {
     user: {
@@ -107,21 +70,21 @@ function buildFallbackAdminResult() {
     token: "offline-token",
   };
 }
- 
+
 // ─── login ─────────────────────────────────────────────────────────────────
 export async function login(email, password) {
- 
+
   // ── Try real backend first ─────────────────────────────
   try {
     const res = await http.post("/auth/login/", {
       username: email,
       password,
     });
- 
+
     if (!res.data.success) {
       throw new Error(res.data.message || "Login failed.");
     }
- 
+
     // Build user object — include status & onboardingDone from backend
     const rawRole =
       res.data.role ??
@@ -138,11 +101,9 @@ export async function login(email, password) {
       status:         res.data.status         ?? "active",
       onboardingDone: res.data.onboardingDone  ?? false,
       avatar:         "",
-      uid:            null,
+      uid:            res.data._id,  // use backend id as uid
     };
- 
-    user = await signIntoFirebase(user, res.data.firebaseToken);
- 
+
     // Save JWT tokens for API calls
     try {
       if (res.data.access_token) localStorage.setItem("access_token", res.data.access_token);
@@ -151,18 +112,18 @@ export async function login(email, password) {
 
     return {
       user,
-      token: res.data.access_token, // kept for App.jsx signature; now it's a real bearer token
+      token: res.data.access_token,
     };
- 
+
   } catch (err) {
- 
+
     // ── Network error → try fallback admin ─────────────────
     const isNetworkError =
       !err.response ||
       err.code === "ERR_NETWORK" ||
       err.code === "ECONNREFUSED" ||
       err.message?.includes("Network Error");
- 
+
     if (isNetworkError) {
       if (isFallbackAdmin(email, password)) {
         console.warn("⚠️ Backend offline — using fallback admin.");
@@ -172,7 +133,7 @@ export async function login(email, password) {
         `Backend is offline. Use ${FALLBACK_ADMIN.username} / ${FALLBACK_ADMIN.password} to log in offline.`
       );
     }
- 
+
     throw new Error(
       err.response?.data?.message ||
       err.response?.data?.detail  ||
@@ -181,7 +142,7 @@ export async function login(email, password) {
     );
   }
 }
- 
+
 // ─── register ──────────────────────────────────────────────────────────────
 export async function register({ name, email, phone, password, role }) {
   try {
@@ -192,18 +153,18 @@ export async function register({ name, email, phone, password, role }) {
       password,
       role: role || "client",
     });
- 
+
     if (!res.data.success) {
       throw new Error(res.data.message || "Registration failed.");
     }
- 
+
     return { success: true };
- 
+
   } catch (err) {
     throw new Error(formatAuthApiError(err, "Registration failed."));
   }
 }
- 
+
 // ─── forgotPassword ────────────────────────────────────────────────────────
 export async function forgotPassword(email) {
   const res = await http.post("/auth/forgot-password/", { email });
@@ -287,7 +248,7 @@ export async function registerResendCode(pendingId) {
     throw new Error(formatAuthApiError(err, "Resend failed."));
   }
 }
- 
+
 // ─── changeUsername ────────────────────────────────────────────────────────
 export async function changeUsername(oldUsername, newUsername) {
   try {
@@ -300,7 +261,7 @@ export async function changeUsername(oldUsername, newUsername) {
     throw new Error(err.response?.data?.message || err.message);
   }
 }
- 
+
 // ─── changePassword ────────────────────────────────────────────────────────
 export async function changePassword(username, oldPassword, newPassword) {
   try {
@@ -322,7 +283,7 @@ export async function changePassword(username, oldPassword, newPassword) {
     throw new Error(err.response?.data?.message || err.message);
   }
 }
- 
+
 // ─── logout ────────────────────────────────────────────────────────────────
 export async function logout() {
   try {
@@ -335,16 +296,8 @@ export async function logout() {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
     } catch {}
-
-    if (auth.currentUser?.uid) {
-      await setDoc(doc(db, "users", auth.currentUser.uid), {
-        status:   "offline",
-        lastSeen: serverTimestamp(),
-      }, { merge: true });
-    }
-    await signOut(auth);
   } catch (err) {
-    console.warn("Firebase logout error:", err.message);
+    console.warn("Logout error:", err.message);
   }
   return { success: true };
 }

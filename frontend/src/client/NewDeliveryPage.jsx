@@ -128,8 +128,8 @@ export default function NewDeliveryPage({ currentUser, addToast, onNext, onBack 
 
       const res = await submitDeliveryRequest({
         client_id: clientId,
-        pickup,
-        dropoff,
+       
+        
         description: desc,
         price: 250,
         size,

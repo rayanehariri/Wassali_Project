@@ -23,10 +23,15 @@ export default function DelivererMessagesPage({ currentUser }) {
   } = useChat(currentUser?.id || currentUser?.uid);
   const selfId = currentUser?.id || currentUser?.uid;
 
+  const customerConvs = conversations.filter(c => c.type !== "support");
+
+  // Bootstrap: auto-create conversation with active task's client
+  const bootstrapRef = useRef(false);
   useEffect(() => {
+    if (bootstrapRef.current || activeConvId) return;
     let alive = true;
+    bootstrapRef.current = true;
     async function bootstrapActiveClientChat() {
-      if (activeConvId) return;
       try {
         const task = await getActiveTask();
         const clientId = task?.clientId;
@@ -39,8 +44,9 @@ export default function DelivererMessagesPage({ currentUser }) {
     }
     bootstrapActiveClientChat();
     return () => { alive = false; };
-  }, [activeConvId, createConversation, setActiveConvId]);
+  }, [createConversation, setActiveConvId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-select first conversation if none is active
   const pickedInitialRef = useRef(false);
   useEffect(() => {
     if (activeConvId) {
@@ -48,8 +54,9 @@ export default function DelivererMessagesPage({ currentUser }) {
       return;
     }
     if (pickedInitialRef.current) return;
-    if (conversations.length > 0) {
-      setActiveConvId(conversations[0].id);
+    const custConvs = conversations.filter(c => c.type !== "support");
+    if (custConvs.length > 0) {
+      setActiveConvId(custConvs[0].id);
       pickedInitialRef.current = true;
     }
   }, [conversations, activeConvId, setActiveConvId]);
@@ -94,10 +101,10 @@ export default function DelivererMessagesPage({ currentUser }) {
             </div>
           ) : chatError ? (
             <p className="!text-[12px] !text-red-300 !text-center !py-8 !m-0 !px-3">{chatError}</p>
-          ) : conversations.length === 0 ? (
+          ) : customerConvs.length === 0 ? (
             <p className="!text-[12px] !text-slate-600 !text-center !py-8 !m-0">No conversations yet</p>
           ) : (
-            conversations.map(conv => (
+            customerConvs.map(conv => (
               <ConvItem
                 key={conv.id}
                 conv={conv}
@@ -139,7 +146,7 @@ export default function DelivererMessagesPage({ currentUser }) {
           {/* Messages */}
           <div className="!flex-1 !overflow-y-auto !px-6 !py-4"
             style={{ background: "#0d1117" }}>
-            <DateSeparator label="TODAY" />
+            <DateSeparator date={messages[0]?.timestamp} />
             {messages.map((msg, i) => {
               const prev   = messages[i - 1];
               const showAv = !prev || prev.senderId !== msg.senderId;

@@ -1,16 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import {
-  collection, query, orderBy, onSnapshot,
-  addDoc, updateDoc, doc, serverTimestamp,
-  where, getDocs, setDoc, getDoc, limit,
-} from "firebase/firestore";
-import { auth, db } from "../Firebase.config"; // ← adjust path
-import { http } from "../api/http";
- 
+import { io } from "socket.io-client";
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 export function timeAgo(ts) {
   if (!ts) return "";
-  const d    = ts.toDate ? ts.toDate() : new Date(ts);
+  const d = ts instanceof Date ? ts : new Date(ts);
+  if (isNaN(d.getTime())) return "";
   const diff = Math.floor((Date.now() - d.getTime()) / 1000);
   if (diff < 5)    return "NOW";
   if (diff < 60)   return `${diff}s`;
@@ -18,13 +13,103 @@ export function timeAgo(ts) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}H`;
   return "YESTERDAY";
 }
- 
+
 export function formatTime(ts) {
   if (!ts) return "";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const d = ts instanceof Date ? ts : new Date(ts);
+  if (isNaN(d.getTime())) return "";
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
- 
+
+// ── Socket singleton ──────────────────────────────────────────────────────────
+let _socket = null;
+let _socketUserId = null;
+let _socketReady = false;      // true after first successful authenticate
+const _authCallbacks = [];      // queued callbacks waiting for auth
+
+/**
+ * Get (or create) the singleton Socket.IO connection.
+ * Exported so support-chat widgets can share the same connection.
+ */
+export function getSocket() {
+  const token = localStorage.getItem("access_token");
+  if (!token) return null;
+
+  // Reuse existing socket
+  if (_socket) return _socket;
+
+  // Build the backend URL (same origin or env override)
+  const backendUrl =
+    import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, "") ||
+    "http://localhost:5000";
+
+  _socket = io(backendUrl, {
+    transports: ["polling", "websocket"],
+    autoConnect: true,
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionAttempts: 10,
+  });
+
+  _socket.on("connect", () => {
+    // Always re-read token on (re)connect in case it was refreshed
+    const freshToken = localStorage.getItem("access_token");
+    if (freshToken) {
+      _socket.emit("authenticate", { token: `Bearer ${freshToken}` });
+    }
+  });
+
+  _socket.on("authenticated", (data) => {
+    _socketUserId = data.user_id;
+    _socketReady = true;
+    // Flush any pending auth callbacks
+    while (_authCallbacks.length) {
+      const cb = _authCallbacks.shift();
+      try { cb(); } catch {}
+    }
+  });
+
+  _socket.on("auth_error", () => {
+    console.warn("Chat socket auth failed — token may be expired.");
+    _socketReady = false;
+  });
+
+  return _socket;
+}
+
+/**
+ * Returns true if the socket is authenticated and ready.
+ */
+export function isSocketReady() {
+  return _socketReady && _socket?.connected;
+}
+
+/**
+ * Run `fn` once the socket is authenticated. If already ready, runs immediately.
+ */
+export function onSocketReady(fn) {
+  if (_socketReady && _socket?.connected) {
+    fn();
+  } else {
+    _authCallbacks.push(fn);
+  }
+}
+
+/**
+ * Resolve the current user's backend MongoDB _id from localStorage.
+ * Prefers `id` (backend _id), falls back to `uid`.
+ */
+export function resolveCurrentUid(propUid) {
+  try {
+    const raw = localStorage.getItem("currentUser");
+    const parsed = raw ? JSON.parse(raw) : null;
+    // Backend _id is stored as `id`; uid is the enriched copy
+    return parsed?.id || parsed?.uid || propUid || null;
+  } catch {
+    return propUid || null;
+  }
+}
+
 // ── main hook ─────────────────────────────────────────────────────────────────
 export function useChat(currentUidProp) {
   const [conversations,  setConversations]  = useState([]);
@@ -34,321 +119,185 @@ export function useChat(currentUidProp) {
   const [loadingConvs,   setLoadingConvs]   = useState(true);
   const [loadingMsgs,    setLoadingMsgs]    = useState(false);
   const [chatError,      setChatError]      = useState("");
-  let resolvedUid = currentUidProp ?? auth.currentUser?.uid ?? null;
-  if (!resolvedUid) {
-    try {
-      const raw = localStorage.getItem("currentUser");
-      const parsed = raw ? JSON.parse(raw) : null;
-      resolvedUid = parsed?.uid || parsed?.id || null;
-    } catch {}
-  }
-  // Prefer backend user id for deterministic client<->deliverer chats.
-  try {
-    const raw = localStorage.getItem("currentUser");
-    const parsed = raw ? JSON.parse(raw) : null;
-    if (parsed?.id) resolvedUid = parsed.id;
-  } catch {}
-  const currentUid = resolvedUid;
- 
+
+  // Single, consistent uid resolution
+  const currentUid = resolveCurrentUid(currentUidProp);
+
   const typingTimerRef = useRef(null);
+  const socketRef = useRef(null);
 
-  const buildInitials = useCallback((name, fallback = "U") => {
-    const words = String(name || "").trim().split(/\s+/).filter(Boolean);
-    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-    return String(fallback || "U").slice(0, 2).toUpperCase();
-  }, []);
+  // ── Ref to track activeConvId inside socket listeners ─────────────────────
+  const activeConvIdRef = useRef(activeConvId);
+  useEffect(() => {
+    activeConvIdRef.current = activeConvId;
+  }, [activeConvId]);
 
-  const resolveUserProfile = useCallback(async (uidLike) => {
-    const fallbackName = `User ${String(uidLike || "").slice(0, 6)}`;
-    try {
-      const direct = await getDoc(doc(db, "users", uidLike));
-      if (direct.exists()) {
-        const data = direct.data() || {};
-        const name = data.name || data.username || fallbackName;
-        return {
-          uid: uidLike,
-          ...data,
-          name,
-          avatar: data.avatar || buildInitials(name, uidLike),
-        };
-      }
-    } catch {}
-
-    // Conversations currently use Mongo ids; users docs are keyed by Firebase uid.
-    try {
-      const q = query(collection(db, "users"), where("mongoId", "==", uidLike), limit(1));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const match = snap.docs[0];
-        const data = match.data() || {};
-        const name = data.name || data.username || fallbackName;
-        return {
-          uid: uidLike,
-          ...data,
-          firebaseUid: match.id,
-          name,
-          avatar: data.avatar || buildInitials(name, uidLike),
-        };
-      }
-    } catch {}
-
-    try {
-      const res = await http.get(`/auth/peer/${encodeURIComponent(uidLike)}/`);
-      const u = res?.data?.user ?? res?.data?.data?.user;
-      if (u) {
-        const name = u.name || u.username || fallbackName;
-        return {
-          uid: uidLike,
-          mongoId: u._id,
-          name,
-          avatar: buildInitials(name, uidLike),
-          role: u.role,
-        };
-      }
-    } catch {}
-
-    return { uid: uidLike, name: fallbackName, avatar: buildInitials(fallbackName, uidLike) };
-  }, [buildInitials]);
- 
-  // ── 1. Listen to conversations ─────────────────────────────────────────────
+  // ── 1. Connect socket & listen to events ──────────────────────────────────
   useEffect(() => {
     if (!currentUid) {
       setLoadingConvs(false);
       setConversations([]);
-      setChatError("Missing user uid for chat session.");
+      setChatError("Missing user id for chat session.");
       return;
     }
-    setLoadingConvs(true);
-    setChatError("");
- 
-    const orderedQuery = query(
-      collection(db, "conversations"),
-      where("participants", "array-contains", currentUid),
-      orderBy("lastMessageAt", "desc")
-    );
-    const fallbackQuery = query(
-      collection(db, "conversations"),
-      where("participants", "array-contains", currentUid)
-    );
- 
-    async function mapConvs(docs) {
-      const convs = await Promise.all(docs.map(async (d) => {
-        const data = d.data ? d.data() : d;
- 
-        // fetch participant profiles
-        const profiles = await Promise.all((data.participants ?? []).map(resolveUserProfile));
- 
-        const otherId = data.participants?.find(p => p !== currentUid);
-        return {
-          id:              d.id,
-          ...data,
-          participantData: profiles,
-          otherUser:       profiles.find(p => p.uid !== currentUid) ?? null,
-          isTyping:        data.typing?.[otherId] ?? false,
-        };
-      }));
-      convs.sort((a, b) => {
-        const aTs = a?.lastMessageAt?.toMillis?.() ?? 0;
-        const bTs = b?.lastMessageAt?.toMillis?.() ?? 0;
-        return bTs - aTs;
-      });
-      // One thread per counterparty (avoids duplicate rows for the same deliverer/client).
-      const byOther = new Map();
-      for (const c of convs) {
-        const oid = c.otherUser?.uid ?? c.participants?.find((p) => p !== currentUid);
-        if (!oid) continue;
-        const prev = byOther.get(oid);
-        if (!prev) {
-          byOther.set(oid, c);
-          continue;
-        }
-        const pTs = prev?.lastMessageAt?.toMillis?.() ?? 0;
-        const nTs = c?.lastMessageAt?.toMillis?.() ?? 0;
-        if (nTs >= pTs) byOther.set(oid, c);
-      }
-      const deduped = [...byOther.values()].sort((a, b) => {
-        const aTs = a?.lastMessageAt?.toMillis?.() ?? 0;
-        const bTs = b?.lastMessageAt?.toMillis?.() ?? 0;
-        return bTs - aTs;
-      });
-      setConversations(deduped);
+
+    const socket = getSocket();
+    if (!socket) {
       setLoadingConvs(false);
+      setChatError("No auth token found.");
+      return;
+    }
+    socketRef.current = socket;
+    setChatError("");
+    setLoadingConvs(true);
+
+    function onConversationsList(convs) {
+      setConversations(convs || []);
+      setLoadingConvs(false);
+      setChatError("");
     }
 
-    let unsub = () => {};
-    unsub = onSnapshot(
-      orderedQuery,
-      async (snap) => {
-        setChatError("");
-        await mapConvs(snap.docs);
-      },
-      (err) => {
-        const msg = String(err?.message || "");
-        // Missing index is common on first setup: retry with simpler query.
-        if (msg.includes("index") || msg.includes("failed-precondition")) {
-          unsub = onSnapshot(
-            fallbackQuery,
-            async (snap) => {
-              setChatError("");
-              await mapConvs(snap.docs);
-            },
-            () => {
-              setChatError("Chat conversations failed to load.");
-              setLoadingConvs(false);
-            }
-          );
-          return;
+    function onNewMessage(data) {
+      const { conversationId, message } = data;
+      setMessages((prev) => {
+        if (conversationId === activeConvIdRef.current) {
+          if (prev.some(m => m.id === message.id)) return prev;
+          return [...prev, message];
         }
-        setChatError("Chat conversations failed to load.");
-        setLoadingConvs(false);
-      }
-    );
-
-    return () => { try { unsub(); } catch {} };
-  }, [currentUid]);
- 
-  // ── 2. Listen to messages ──────────────────────────────────────────────────
-  useEffect(() => {
-    if (!activeConvId || !currentUid) return;
-    setLoadingMsgs(true);
- 
-    const q = query(
-      collection(db, "conversations", activeConvId, "messages"),
-      orderBy("timestamp", "asc")
-    );
- 
-    const unsub = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoadingMsgs(false);
- 
-      // mark incoming as read
-      snap.docs.forEach(d => {
-        if (d.data().senderId !== currentUid && !d.data().read) {
-          updateDoc(
-            doc(db, "conversations", activeConvId, "messages", d.id),
-            { read: true }
-          ).catch(() => {});
-        }
+        return prev;
       });
- 
-      // reset unread count for current user
-      updateDoc(doc(db, "conversations", activeConvId), {
-        [`unreadCount.${currentUid}`]: 0,
-      }).catch(() => {});
-    });
- 
-    return () => unsub();
-  }, [activeConvId, currentUid]);
- 
-  // ── 3. Listen to typing ────────────────────────────────────────────────────
+    }
+
+    function onMessagesHistory(data) {
+      const { conversationId, messages: msgs } = data;
+      if (conversationId === activeConvIdRef.current) {
+        setMessages(msgs || []);
+        setLoadingMsgs(false);
+      }
+    }
+
+    function onTyping(data) {
+      const { conversationId, userId, isTyping } = data;
+      if (conversationId === activeConvIdRef.current && userId !== currentUid) {
+        setOtherTyping(isTyping);
+      }
+    }
+
+    function onMessagesRead(data) {
+      const { conversationId, readBy } = data;
+      if (conversationId === activeConvIdRef.current && readBy !== currentUid) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.senderId === currentUid && !m.read ? { ...m, read: true } : m
+          )
+        );
+      }
+    }
+
+    function onConversationCreated() {
+      socket.emit("get_conversations");
+    }
+
+    socket.on("conversations_list", onConversationsList);
+    socket.on("new_message", onNewMessage);
+    socket.on("messages_history", onMessagesHistory);
+    socket.on("typing", onTyping);
+    socket.on("messages_read", onMessagesRead);
+    socket.on("conversation_created", onConversationCreated);
+
+    // Request conversations — handle both "already authenticated" and "not yet" cases
+    if (isSocketReady()) {
+      socket.emit("get_conversations");
+    } else {
+      onSocketReady(() => {
+        socket.emit("get_conversations");
+      });
+    }
+
+    return () => {
+      socket.off("conversations_list", onConversationsList);
+      socket.off("new_message", onNewMessage);
+      socket.off("messages_history", onMessagesHistory);
+      socket.off("typing", onTyping);
+      socket.off("messages_read", onMessagesRead);
+      socket.off("conversation_created", onConversationCreated);
+    };
+  }, [currentUid]);
+
+  // ── 2. Join conversation when activeConvId changes ────────────────────────
   useEffect(() => {
     if (!activeConvId || !currentUid) return;
- 
-    const unsub = onSnapshot(doc(db, "conversations", activeConvId), (snap) => {
-      const typing = snap.data()?.typing ?? {};
-      const othersTyping = Object.entries(typing)
-        .filter(([uid]) => uid !== currentUid)
-        .some(([, val]) => val);
-      setOtherTyping(othersTyping);
-    });
- 
-    return () => unsub();
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    setLoadingMsgs(true);
+    setMessages([]);
+    setOtherTyping(false);
+
+    socket.emit("join_conversation", { conversationId: activeConvId });
   }, [activeConvId, currentUid]);
- 
-  // ── 4. Handle typing indicator ─────────────────────────────────────────────
+
+  // ── 3. Handle typing indicator ────────────────────────────────────────────
   const handleTyping = useCallback(() => {
     if (!activeConvId || !currentUid) return;
- 
-    updateDoc(doc(db, "conversations", activeConvId), {
-      [`typing.${currentUid}`]: true,
-    }).catch(() => {});
- 
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    socket.emit("typing", { conversationId: activeConvId, isTyping: true });
+
     clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => {
-      updateDoc(doc(db, "conversations", activeConvId), {
-        [`typing.${currentUid}`]: false,
-      }).catch(() => {});
+      socket.emit("typing", { conversationId: activeConvId, isTyping: false });
     }, 2000);
   }, [activeConvId, currentUid]);
- 
-  // ── 5. Send message ────────────────────────────────────────────────────────
+
+  // ── 4. Send message ───────────────────────────────────────────────────────
   const sendMessage = useCallback(async (text, extra = {}) => {
     if (!text?.trim() || !activeConvId || !currentUid) return;
- 
+    const socket = socketRef.current;
+    if (!socket) return;
+
     clearTimeout(typingTimerRef.current);
-    updateDoc(doc(db, "conversations", activeConvId), {
-      [`typing.${currentUid}`]: false,
-    }).catch(() => {});
- 
-    await addDoc(collection(db, "conversations", activeConvId, "messages"), {
-      senderId:  currentUid,
-      text:      text.trim(),
-      timestamp: serverTimestamp(),
-      read:      false,
-      ...extra,
-    });
- 
-    // update conversation preview + increment other user's unread
-    const conv = (await getDoc(doc(db, "conversations", activeConvId))).data();
-    const otherId = conv?.participants?.find(p => p !== currentUid);
- 
-    await updateDoc(doc(db, "conversations", activeConvId), {
-      lastMessage:                        text.trim(),
-      lastMessageAt:                      serverTimestamp(),
-      [`unreadCount.${otherId}`]:         (conv?.unreadCount?.[otherId] ?? 0) + 1,
+    socket.emit("typing", { conversationId: activeConvId, isTyping: false });
+
+    socket.emit("send_message", {
+      conversationId: activeConvId,
+      text: text.trim(),
+      extra,
     });
   }, [activeConvId, currentUid]);
- 
-  // ── 6. Create a conversation ───────────────────────────────────────────────
+
+  // ── 5. Create a conversation ──────────────────────────────────────────────
   const createConversation = useCallback(async (otherUid, type = "customer") => {
     if (!currentUid || !otherUid) return null;
-    const q = query(
-      collection(db, "conversations"),
-      where("participants", "array-contains", currentUid),
-    );
-    const snap = await getDocs(q);
-    const matches = snap.docs.filter((d) => {
-      const data = d.data() || {};
-      const p = data.participants || [];
-      const typeOk = !data.type || data.type === type;
-      return p.includes(otherUid) && typeOk;
-    });
-    let existing = null;
-    let bestTs = -1;
-    for (const d of matches) {
-      const lm = d.data()?.lastMessageAt;
-      const ts = lm?.toMillis?.() ?? 0;
-      if (ts >= bestTs) {
-        bestTs = ts;
-        existing = d;
+    const socket = socketRef.current;
+    if (!socket) return null;
+
+    return new Promise((resolve) => {
+      function onCreated(data) {
+        if (data.otherUid === otherUid && data.type === type) {
+          socket.off("conversation_created", onCreated);
+          const convId = data.conversationId;
+          setActiveConvId(convId);
+          resolve(convId);
+        }
       }
-    }
-    if (existing) {
-      setActiveConvId(existing.id);
-      return existing.id;
-    }
- 
-    // create new
-    const ref = doc(collection(db, "conversations"));
-    await setDoc(ref, {
-      participants:  [currentUid, otherUid],
-      type,
-      status:        "active",
-      lastMessage:   "",
-      lastMessageAt: serverTimestamp(),
-      typing:        {},
-      unreadCount:   { [currentUid]: 0, [otherUid]: 0 },
+      socket.on("conversation_created", onCreated);
+      socket.emit("create_conversation", { otherUid, type });
+
+      // Timeout fallback
+      setTimeout(() => {
+        socket.off("conversation_created", onCreated);
+        resolve(null);
+      }, 5000);
     });
-    setActiveConvId(ref.id);
-    return ref.id;
   }, [currentUid]);
- 
+
   const activeConv     = conversations.find(c => c.id === activeConvId) ?? null;
   const otherUser      = activeConv?.otherUser ?? null;
   const unreadTotal    = conversations.reduce((sum, c) =>
     sum + (c.unreadCount?.[currentUid] ?? 0), 0);
- 
+
   return {
     conversations, activeConvId, setActiveConvId,
     messages, otherTyping,
@@ -356,5 +305,6 @@ export function useChat(currentUidProp) {
     chatError,
     handleTyping, sendMessage, createConversation,
     activeConv, otherUser, unreadTotal,
+    currentUid,
   };
 }

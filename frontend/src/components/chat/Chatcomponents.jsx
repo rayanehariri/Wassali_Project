@@ -146,14 +146,42 @@ export function MessageBubble({ msg, isOwn, showAvatar = true, avatarUser }) {
   );
 }
  
-// ── Date separator ────────────────────────────────────────────────────────────
-export function DateSeparator({ label = "TODAY, OCTOBER 24" }) {
+// ── Date separator ────────────────────────────────────────────────────────
+export function DateSeparator({ label, date }) {
+  // Compute display label from a date, or use a provided label
+  let displayLabel = label;
+  if (!displayLabel) {
+    if (date) {
+      const d = date instanceof Date ? date : new Date(date);
+      if (!isNaN(d.getTime())) {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const diffDays = Math.round((today - target) / 86400000);
+        if (diffDays === 0) {
+          displayLabel = "TODAY";
+        } else if (diffDays === 1) {
+          displayLabel = "YESTERDAY";
+        } else {
+          displayLabel = d.toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+          }).toUpperCase();
+        }
+      } else {
+        displayLabel = "TODAY";
+      }
+    } else {
+      displayLabel = "TODAY";
+    }
+  }
   return (
     <div className="!flex !items-center !gap-3 !my-5">
       <div className="!flex-1 !h-px" style={{ background: "#1e2535" }} />
       <span className="!text-[10px] !font-bold !text-slate-500 !tracking-widest !px-3 !py-1 !rounded-full"
         style={{ background: "#1a2535" }}>
-        {label}
+        {displayLabel}
       </span>
       <div className="!flex-1 !h-px" style={{ background: "#1e2535" }} />
     </div>

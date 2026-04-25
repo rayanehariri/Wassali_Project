@@ -1,21 +1,10 @@
-// SupportChatWidget.jsx
+// SupportChatWidget.jsx — Uses shared Socket.IO connection via useChat hook
 import { useState, useRef, useEffect } from "react";
 import { X, Paperclip, Send, Check, CheckCheck } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  collection, addDoc, query, orderBy, onSnapshot,
-  updateDoc, doc, serverTimestamp, where,
-  getDocs, setDoc, getDoc,
-} from "firebase/firestore";
-import { db } from "../../Firebase.config";
+import { useChat, formatTime, resolveCurrentUid } from "../../hooks/Usechat";
 
-const SUPPORT_AGENT_UID = "support-agent-001";
-
-function formatTime(ts) {
-  if (!ts) return "";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
+const SUPPORT_AGENT_UID = "ADMIN-ROOT-001";
 
 function Bubble({ msg, isOwn }) {
   return (
@@ -41,128 +30,42 @@ function Bubble({ msg, isOwn }) {
 }
 
 export default function SupportChatWidget({ currentUser, onClose, variant = "deliverer" }) {
-  // ← KEY FIX: use id as fallback when uid is null
-  const userUid = currentUser?.uid || currentUser?.id || null;
+  const userUid = resolveCurrentUid(currentUser?.id || currentUser?.uid);
 
-  const [convId,      setConvId]      = useState(null);
-  const [messages,    setMessages]    = useState([]);
-  const [input,       setInput]       = useState("");
-  const [agentTyping, setAgentTyping] = useState(false);
-  const [ready,       setReady]       = useState(false);
-  const [error,       setError]       = useState(null);
-  const endRef         = useRef(null);
-  const typingTimerRef = useRef(null);
+  const {
+    messages,
+    otherTyping: agentTyping,
+    chatError,
+    sendMessage,
+    createConversation,
+    activeConvId,
+    setActiveConvId,
+    handleTyping,
+  } = useChat(userUid);
+
+  const [input, setInput] = useState("");
+  const [ready, setReady] = useState(false);
+  const endRef = useRef(null);
+  const bootstrapRef = useRef(false);
 
   const agentInfo = { name: "Amina B.", role: "Support Specialist", avatar: "AB" };
 
+  // Bootstrap: create or find the support conversation on mount
   useEffect(() => {
-    // ← wait until we have a valid uid
-    if (!userUid) {
-      setError("Please log in to use support chat.");
-      return;
-    }
-
-    async function init() {
-      try {
-        // ── ensure user doc exists in Firestore ────────────
-        const userRef = doc(db, "users", userUid);
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) {
-          await setDoc(userRef, {
-            uid:      userUid,
-            name:     currentUser?.name ?? "User",
-            role:     currentUser?.role ?? "client",
-            avatar:   (currentUser?.name ?? "U").slice(0, 2).toUpperCase(),
-            status:   "online",
-            lastSeen: serverTimestamp(),
-          }, { merge: true });
-        }
-
-        // ── find or create support conversation ────────────
-        const q = query(
-          collection(db, "conversations"),
-          where("participants", "array-contains", userUid),
-          where("type", "==", "support")
-        );
-        const snap = await getDocs(q);
-
-        let id;
-        if (!snap.empty) {
-          id = snap.docs[0].id;
-        } else {
-          const ref = doc(collection(db, "conversations"));
-          await setDoc(ref, {
-            participants:  [userUid, SUPPORT_AGENT_UID],
-            type:          "support",
-            status:        "active",
-            lastMessage:   "",
-            lastMessageAt: serverTimestamp(),
-            typing:        {},
-            unreadCount:   { [userUid]: 0, [SUPPORT_AGENT_UID]: 0 },
-          });
-          id = ref.id;
-
-          // welcome message from agent
-          await addDoc(collection(db, "conversations", id, "messages"), {
-            senderId:  SUPPORT_AGENT_UID,
-            text:      `Hello! I'm ${agentInfo.name} from the Wassali support team. How can I assist you today? 👋`,
-            timestamp: serverTimestamp(),
-            read:      false,
-          });
-        }
-
-        setConvId(id);
+    if (bootstrapRef.current || !userUid) return;
+    bootstrapRef.current = true;
+    createConversation(SUPPORT_AGENT_UID, "support").then((id) => {
+      if (id) {
+        setActiveConvId(id);
         setReady(true);
-      } catch (err) {
-        console.error("Support chat init error:", err);
-        setError("Failed to connect to support. Please try again.");
       }
-    }
-
-    init();
-  }, [userUid]);
-
-  // Listen to messages
-  useEffect(() => {
-    if (!convId || !userUid) return;
-
-    const q = query(
-      collection(db, "conversations", convId, "messages"),
-      orderBy("timestamp", "asc")
-    );
-
-    const unsub = onSnapshot(q, snap => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      snap.docs.forEach(d => {
-        if (d.data().senderId !== userUid && !d.data().read) {
-          updateDoc(
-            doc(db, "conversations", convId, "messages", d.id),
-            { read: true }
-          ).catch(() => {});
-        }
-      });
-    }, err => {
-      console.error("Messages listener error:", err);
     });
+  }, [userUid, createConversation, setActiveConvId]);
 
-    return () => unsub();
-  }, [convId, userUid]);
-
-  // Listen to typing
+  // Mark ready once we have an active conversation
   useEffect(() => {
-    if (!convId || !userUid) return;
-
-    const unsub = onSnapshot(doc(db, "conversations", convId), snap => {
-      const t = snap.data()?.typing ?? {};
-      setAgentTyping(
-        Object.entries(t)
-          .filter(([u]) => u !== userUid)
-          .some(([, v]) => v)
-      );
-    }, () => {});
-
-    return () => unsub();
-  }, [convId, userUid]);
+    if (activeConvId) setReady(true);
+  }, [activeConvId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -170,44 +73,21 @@ export default function SupportChatWidget({ currentUser, onClose, variant = "del
 
   function handleInputChange(e) {
     setInput(e.target.value);
-    if (!convId || !userUid) return;
-    updateDoc(doc(db, "conversations", convId), {
-      [`typing.${userUid}`]: true,
-    }).catch(() => {});
-    clearTimeout(typingTimerRef.current);
-    typingTimerRef.current = setTimeout(() => {
-      updateDoc(doc(db, "conversations", convId), {
-        [`typing.${userUid}`]: false,
-      }).catch(() => {});
-    }, 2000);
+    handleTyping?.();
   }
 
   async function handleSend() {
     const text = input.trim();
-    if (!text || !convId || !userUid) return;
+    if (!text || !activeConvId || !userUid) return;
     setInput("");
-    clearTimeout(typingTimerRef.current);
-    updateDoc(doc(db, "conversations", convId), {
-      [`typing.${userUid}`]: false,
-    }).catch(() => {});
-
-    await addDoc(collection(db, "conversations", convId, "messages"), {
-      senderId:  userUid,
-      text,
-      timestamp: serverTimestamp(),
-      read:      false,
-    });
-
-    await updateDoc(doc(db, "conversations", convId), {
-      lastMessage:   text,
-      lastMessageAt: serverTimestamp(),
-    });
+    sendMessage(text);
   }
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   }
 
+  const error = chatError || (!userUid ? "Please log in to use support chat." : null);
   const h = variant === "client" ? 460 : 400;
 
   return (
